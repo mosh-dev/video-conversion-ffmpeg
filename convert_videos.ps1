@@ -27,7 +27,7 @@ Add-Type -AssemblyName System.Drawing
 # Create the form
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "Video Conversion Settings"
-$form.Size = New-Object System.Drawing.Size(500, 380)
+$form.Size = New-Object System.Drawing.Size(500, 460)
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = "FixedDialog"
 $form.MaximizeBox = $false
@@ -70,7 +70,7 @@ $containerCombo = New-Object System.Windows.Forms.ComboBox
 $containerCombo.Location = New-Object System.Drawing.Point(10, 140)
 $containerCombo.Size = New-Object System.Drawing.Size(460, 25)
 $containerCombo.DropDownStyle = "DropDownList"
-[void]$containerCombo.Items.Add("Preserve original (mkv→mkv, mp4→mp4)")
+[void]$containerCombo.Items.Add("Preserve original (mkv > mkv, mp4 > mp4)")
 [void]$containerCombo.Items.Add("Convert all to $OutputExtension")
 $containerCombo.SelectedIndex = if ($PreserveContainer) { 0 } else { 1 }
 $form.Controls.Add($containerCombo)
@@ -92,9 +92,84 @@ $audioCombo.DropDownStyle = "DropDownList"
 $audioCombo.SelectedIndex = if ($PreserveAudio) { 0 } else { 1 }
 $form.Controls.Add($audioCombo)
 
+# Bitrate Multiplier Section
+$bitrateLabel = New-Object System.Windows.Forms.Label
+$bitrateLabel.Location = New-Object System.Drawing.Point(10, 245)
+$bitrateLabel.Size = New-Object System.Drawing.Size(150, 20)
+$bitrateLabel.Text = "Bitrate Multiplier:"
+$bitrateLabel.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+$form.Controls.Add($bitrateLabel)
+
+# Bitrate value label (shows current slider value) - positioned right next to the label
+$bitrateValueLabel = New-Object System.Windows.Forms.Label
+$bitrateValueLabel.Location = New-Object System.Drawing.Point(165, 245)
+$bitrateValueLabel.Size = New-Object System.Drawing.Size(60, 20)
+$bitrateValueLabel.Text = $BitrateModifier.ToString("0.0") + "x"
+$bitrateValueLabel.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
+$bitrateValueLabel.TextAlign = "MiddleLeft"
+$bitrateValueLabel.ForeColor = [System.Drawing.Color]::FromArgb(0, 102, 204)
+$form.Controls.Add($bitrateValueLabel)
+
+# Bitrate slider
+$bitrateSlider = New-Object System.Windows.Forms.TrackBar
+$bitrateSlider.Location = New-Object System.Drawing.Point(10, 270)
+$bitrateSlider.Size = New-Object System.Drawing.Size(460, 45)
+$bitrateSlider.Minimum = 5  # 0.5x (will divide by 10)
+$bitrateSlider.Maximum = 30  # 3.0x (will divide by 10)
+$bitrateSlider.Value = [int]($BitrateModifier * 10)
+$bitrateSlider.TickFrequency = 5
+$bitrateSlider.SmallChange = 1
+$bitrateSlider.LargeChange = 5
+
+# Update label when slider moves
+$bitrateSlider.Add_ValueChanged({
+    $value = $bitrateSlider.Value / 10.0
+    $bitrateValueLabel.Text = $value.ToString("0.0") + "x"
+})
+$form.Controls.Add($bitrateSlider)
+
+# Slider guide labels - positioned to align with actual slider thumb positions
+# TrackBar has ~9px margin on each side, so usable width is ~442px for range 5-30 (25 steps)
+$sliderMinLabel = New-Object System.Windows.Forms.Label
+$sliderMinLabel.Location = New-Object System.Drawing.Point(8, 312)
+$sliderMinLabel.Size = New-Object System.Drawing.Size(50, 20)
+$sliderMinLabel.Text = "0.5x"
+$sliderMinLabel.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$sliderMinLabel.ForeColor = [System.Drawing.Color]::DimGray
+$sliderMinLabel.TextAlign = "MiddleLeft"
+$form.Controls.Add($sliderMinLabel)
+
+$sliderMidLabel = New-Object System.Windows.Forms.Label
+$sliderMidLabel.Location = New-Object System.Drawing.Point(200, 312)
+$sliderMidLabel.Size = New-Object System.Drawing.Size(70, 20)
+$sliderMidLabel.Text = "1.0x"
+$sliderMidLabel.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$sliderMidLabel.ForeColor = [System.Drawing.Color]::DimGray
+$sliderMidLabel.TextAlign = "MiddleCenter"
+$form.Controls.Add($sliderMidLabel)
+
+$sliderMaxLabel = New-Object System.Windows.Forms.Label
+$sliderMaxLabel.Location = New-Object System.Drawing.Point(420, 312)
+$sliderMaxLabel.Size = New-Object System.Drawing.Size(50, 20)
+$sliderMaxLabel.Text = "3.0x"
+$sliderMaxLabel.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$sliderMaxLabel.ForeColor = [System.Drawing.Color]::DimGray
+$sliderMaxLabel.TextAlign = "MiddleRight"
+$form.Controls.Add($sliderMaxLabel)
+
+# Slider description
+$sliderDescLabel = New-Object System.Windows.Forms.Label
+$sliderDescLabel.Location = New-Object System.Drawing.Point(250, 245)
+$sliderDescLabel.Size = New-Object System.Drawing.Size(220, 20)
+$sliderDescLabel.Text = "(Adjust encoding quality/file size)"
+$sliderDescLabel.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Italic)
+$sliderDescLabel.ForeColor = [System.Drawing.Color]::Gray
+$sliderDescLabel.TextAlign = "MiddleLeft"
+$form.Controls.Add($sliderDescLabel)
+
 # Default values note
 $noteLabel = New-Object System.Windows.Forms.Label
-$noteLabel.Location = New-Object System.Drawing.Point(10, 245)
+$noteLabel.Location = New-Object System.Drawing.Point(10, 337)
 $noteLabel.Size = New-Object System.Drawing.Size(460, 40)
 $noteLabel.Text = "Note: Default values from config.ps1 are pre-selected.`nYou can change them before starting the conversion."
 $noteLabel.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Italic)
@@ -103,7 +178,7 @@ $form.Controls.Add($noteLabel)
 
 # OK Button
 $okButton = New-Object System.Windows.Forms.Button
-$okButton.Location = New-Object System.Drawing.Point(270, 295)
+$okButton.Location = New-Object System.Drawing.Point(270, 380)
 $okButton.Size = New-Object System.Drawing.Size(100, 30)
 $okButton.Text = "Start"
 $okButton.DialogResult = [System.Windows.Forms.DialogResult]::OK
@@ -113,7 +188,7 @@ $form.Controls.Add($okButton)
 
 # Cancel Button
 $cancelButton = New-Object System.Windows.Forms.Button
-$cancelButton.Location = New-Object System.Drawing.Point(380, 295)
+$cancelButton.Location = New-Object System.Drawing.Point(380, 380)
 $cancelButton.Size = New-Object System.Drawing.Size(100, 30)
 $cancelButton.Text = "Cancel"
 $cancelButton.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
@@ -134,6 +209,7 @@ $OutputCodec = if ($codecCombo.SelectedIndex -eq 0) { "HEVC" } else { "AV1" }
 $DefaultVideoCodec = $CodecMap[$OutputCodec]
 $PreserveContainer = ($containerCombo.SelectedIndex -eq 0)
 $PreserveAudio = ($audioCombo.SelectedIndex -eq 0)
+$BitrateModifier = $bitrateSlider.Value / 10.0
 
 Write-Host "`n========================================" -ForegroundColor Cyan
 Write-Host "  CONVERSION SETTINGS" -ForegroundColor Cyan
@@ -143,6 +219,7 @@ Write-Host "  Container: " -NoNewline -ForegroundColor White
 Write-Host $(if ($PreserveContainer) { "Preserve original" } else { "Convert to $OutputExtension" }) -ForegroundColor White
 Write-Host "  Audio: " -NoNewline -ForegroundColor White
 Write-Host $(if ($PreserveAudio) { "Copy original" } else { "Re-encode to $($AudioCodec.ToUpper())" }) -ForegroundColor White
+Write-Host "  Bitrate Modifier: $($BitrateModifier.ToString('0.0'))x" -ForegroundColor White
 Write-Host "========================================`n" -ForegroundColor Cyan
 
 # Generate timestamped log filename

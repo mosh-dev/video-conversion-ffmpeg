@@ -45,7 +45,7 @@ All parameters are configured in `config.ps1`:
 - `$OutputCodec` - Choose "AV1" or "HEVC" codec
 - `$SkipExistingFiles` - Set to `$true` to skip already-converted files (recommended)
 - `$UseDynamicParameters` - Enable resolution/FPS-based parameter adjustment
-- `$PreserveContainer` - Keep original container format (mkv→mkv, mp4→mp4)
+- `$PreserveContainer` - Keep original container format (mkv > mkv, mp4 > mp4)
 - `$PreserveAudio` - Copy audio without re-encoding (faster, but may have compatibility issues with DTS)
 
 **Parameter Profiles:**
