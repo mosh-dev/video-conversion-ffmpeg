@@ -87,22 +87,19 @@ $ParameterMap = @(
     @{ ProfileName = "4K 60fps+"; ResolutionMin = 3840; FPSMin = 50; FPSMax = 999; VideoBitrate = "40M"; MaxRate = "60M"; BufSize = "80M"; Preset = "p7" },
 
     # 4K 30fps
-    @{ ProfileName = "4K 30fps"; ResolutionMin = 3840; FPSMin = 0; FPSMax = 50; VideoBitrate = "35M"; MaxRate = "55M"; BufSize = "70M"; Preset = "p7" },
+    @{ ProfileName = "4K 30fps"; ResolutionMin = 3840; FPSMin = 0; FPSMax = 50; VideoBitrate = "30M"; MaxRate = "45M"; BufSize = "60M"; Preset = "p7" },
 
     # 2.7K/1440p 60fps
     @{ ProfileName = "2.7K 60fps+"; ResolutionMin = 2560; FPSMin = 50; FPSMax = 999; VideoBitrate = "30M"; MaxRate = "45M"; BufSize = "60M"; Preset = "p6" },
 
     # 2.7K/1440p 30fps
-    @{ ProfileName = "2.7K 30fps"; ResolutionMin = 2560; FPSMin = 0; FPSMax = 50; VideoBitrate = "25M"; MaxRate = "40M"; BufSize = "55M"; Preset = "p6" },
+    @{ ProfileName = "2.7K 30fps"; ResolutionMin = 2560; FPSMin = 0; FPSMax = 50; VideoBitrate = "25M"; MaxRate = "40M"; BufSize = "50M"; Preset = "p6" },
 
     # 1080p 80fps+
-    @{ ProfileName = "1080p 80fps+"; ResolutionMin = 1920; FPSMin = 80; FPSMax = 999; VideoBitrate = "28M"; MaxRate = "42M"; BufSize = "56M"; Preset = "p6" },
-
-    # 1080p 40-79fps
-    @{ ProfileName = "1080p 40-79fps"; ResolutionMin = 1920; FPSMin = 40; FPSMax = 80; VideoBitrate = "22M"; MaxRate = "35M"; BufSize = "44M"; Preset = "p6" },
+    @{ ProfileName = "1080p 50fps+"; ResolutionMin = 1920; FPSMin = 50; FPSMax = 999; VideoBitrate = "25M"; MaxRate = "35M"; BufSize = "50M"; Preset = "p6" },
 
     # 1080p 30fps
-    @{ ProfileName = "1080p 30fps"; ResolutionMin = 1920; FPSMin = 0; FPSMax = 40; VideoBitrate = "15M"; MaxRate = "25M"; BufSize = "35M"; Preset = "p6" },
+    @{ ProfileName = "1080p 30fps"; ResolutionMin = 1920; FPSMin = 0; FPSMax = 50; VideoBitrate = "15M"; MaxRate = "25M"; BufSize = "35M"; Preset = "p6" },
 
     # 720p and below
     @{ ProfileName = "720p or lower"; ResolutionMin = 0; FPSMin = 0; FPSMax = 999; VideoBitrate = "10M"; MaxRate = "18M"; BufSize = "24M"; Preset = "p5" }
