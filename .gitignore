@@ -1,0 +1,16 @@
+# Input and output directories
+input_files/
+output_files/
+
+# IDE configuration
+.idea/
+
+# Logs
+conversion_log.txt
+conversion_logs/
+
+# Temporary files
+*.tmp
+*.temp
+
+logs/
