@@ -7,7 +7,7 @@
 # Edit config.ps1 to customize all parameters
 
 # Load configuration
-. .\config.ps1
+. .\lib\config.ps1
 
 # ============================================================================
 # SCRIPT LOGIC (DO NOT MODIFY BELOW UNLESS YOU KNOW WHAT YOU'RE DOING)
@@ -21,195 +21,30 @@ $StartTime = Get-Date
 # INTERACTIVE PARAMETER SELECTION
 # ============================================================================
 
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
+# Load modern Windows 11 UI
+. .\lib\show_conversion_ui.ps1
 
-# Create the form
-$form = New-Object System.Windows.Forms.Form
-$form.Text = "Video Conversion Settings"
-$form.Size = New-Object System.Drawing.Size(500, 460)
-$form.StartPosition = "CenterScreen"
-$form.FormBorderStyle = "FixedDialog"
-$form.MaximizeBox = $false
-$form.MinimizeBox = $false
+# Show UI and get user selections
+$uiResult = Show-ConversionUI -OutputCodec $OutputCodec `
+                              -PreserveContainer $PreserveContainer `
+                              -PreserveAudio $PreserveAudio `
+                              -BitrateMultiplier $BitrateMultiplier `
+                              -OutputExtension $OutputExtension `
+                              -AudioCodec $AudioCodec `
+                              -DefaultAudioBitrate $DefaultAudioBitrate
 
-# Title Label
-$titleLabel = New-Object System.Windows.Forms.Label
-$titleLabel.Location = New-Object System.Drawing.Point(10, 10)
-$titleLabel.Size = New-Object System.Drawing.Size(460, 30)
-$titleLabel.Text = "Select Conversion Parameters"
-$titleLabel.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
-$form.Controls.Add($titleLabel)
-
-# Video Codec Section
-$codecLabel = New-Object System.Windows.Forms.Label
-$codecLabel.Location = New-Object System.Drawing.Point(10, 50)
-$codecLabel.Size = New-Object System.Drawing.Size(460, 20)
-$codecLabel.Text = "Video Codec:"
-$codecLabel.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
-$form.Controls.Add($codecLabel)
-
-$codecCombo = New-Object System.Windows.Forms.ComboBox
-$codecCombo.Location = New-Object System.Drawing.Point(10, 75)
-$codecCombo.Size = New-Object System.Drawing.Size(460, 25)
-$codecCombo.DropDownStyle = "DropDownList"
-[void]$codecCombo.Items.Add("HEVC (H.265) - Better compatibility")
-[void]$codecCombo.Items.Add("AV1 - Best compression (RTX 40+ only)")
-$codecCombo.SelectedIndex = if ($OutputCodec -eq "HEVC") { 0 } else { 1 }
-$form.Controls.Add($codecCombo)
-
-# Container Format Section
-$containerLabel = New-Object System.Windows.Forms.Label
-$containerLabel.Location = New-Object System.Drawing.Point(10, 115)
-$containerLabel.Size = New-Object System.Drawing.Size(460, 20)
-$containerLabel.Text = "Container Format:"
-$containerLabel.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
-$form.Controls.Add($containerLabel)
-
-$containerCombo = New-Object System.Windows.Forms.ComboBox
-$containerCombo.Location = New-Object System.Drawing.Point(10, 140)
-$containerCombo.Size = New-Object System.Drawing.Size(460, 25)
-$containerCombo.DropDownStyle = "DropDownList"
-[void]$containerCombo.Items.Add("Preserve original (mkv > mkv, mp4 > mp4)")
-[void]$containerCombo.Items.Add("Convert all to $OutputExtension")
-$containerCombo.SelectedIndex = if ($PreserveContainer) { 0 } else { 1 }
-$form.Controls.Add($containerCombo)
-
-# Audio Encoding Section
-$audioLabel = New-Object System.Windows.Forms.Label
-$audioLabel.Location = New-Object System.Drawing.Point(10, 180)
-$audioLabel.Size = New-Object System.Drawing.Size(460, 20)
-$audioLabel.Text = "Audio Encoding:"
-$audioLabel.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
-$form.Controls.Add($audioLabel)
-
-$audioCombo = New-Object System.Windows.Forms.ComboBox
-$audioCombo.Location = New-Object System.Drawing.Point(10, 205)
-$audioCombo.Size = New-Object System.Drawing.Size(460, 25)
-$audioCombo.DropDownStyle = "DropDownList"
-[void]$audioCombo.Items.Add("Copy original audio (fastest, keeps quality)")
-[void]$audioCombo.Items.Add("Re-encode to $($AudioCodec.ToUpper()) @ $DefaultAudioBitrate")
-$audioCombo.SelectedIndex = if ($PreserveAudio) { 0 } else { 1 }
-$form.Controls.Add($audioCombo)
-
-# Bitrate Multiplier Section
-$bitrateLabel = New-Object System.Windows.Forms.Label
-$bitrateLabel.Location = New-Object System.Drawing.Point(10, 245)
-$bitrateLabel.Size = New-Object System.Drawing.Size(150, 20)
-$bitrateLabel.Text = "Bitrate Multiplier:"
-$bitrateLabel.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
-$form.Controls.Add($bitrateLabel)
-
-# Bitrate value label (shows current slider value) - positioned right next to the label
-$bitrateValueLabel = New-Object System.Windows.Forms.Label
-$bitrateValueLabel.Location = New-Object System.Drawing.Point(165, 245)
-$bitrateValueLabel.Size = New-Object System.Drawing.Size(60, 20)
-$bitrateValueLabel.Text = $BitrateMultiplier.ToString("0.0") + "x"
-$bitrateValueLabel.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
-$bitrateValueLabel.TextAlign = "MiddleLeft"
-$bitrateValueLabel.ForeColor = [System.Drawing.Color]::FromArgb(0, 102, 204)
-$form.Controls.Add($bitrateValueLabel)
-
-# Bitrate slider
-$bitrateSlider = New-Object System.Windows.Forms.TrackBar
-$bitrateSlider.Location = New-Object System.Drawing.Point(10, 270)
-$bitrateSlider.Size = New-Object System.Drawing.Size(460, 45)
-$bitrateSlider.Minimum = 1  # 0.1x (will divide by 10)
-$bitrateSlider.Maximum = 30  # 3.0x (will divide by 10)
-$bitrateSlider.Value = [int]($BitrateMultiplier * 10)
-$bitrateSlider.TickFrequency = 5
-$bitrateSlider.SmallChange = 1
-$bitrateSlider.LargeChange = 5
-
-# Update label when slider moves
-$bitrateSlider.Add_ValueChanged({
-    $value = $bitrateSlider.Value / 10.0
-    $bitrateValueLabel.Text = $value.ToString("0.0") + "x"
-})
-$form.Controls.Add($bitrateSlider)
-
-# Slider guide labels - positioned to align with actual slider thumb positions
-# TrackBar has ~9px margin on each side, so usable width is ~442px for range 1-30 (29 steps)
-$sliderMinLabel = New-Object System.Windows.Forms.Label
-$sliderMinLabel.Location = New-Object System.Drawing.Point(8, 312)
-$sliderMinLabel.Size = New-Object System.Drawing.Size(50, 20)
-$sliderMinLabel.Text = "0.1x"
-$sliderMinLabel.Font = New-Object System.Drawing.Font("Segoe UI", 9)
-$sliderMinLabel.ForeColor = [System.Drawing.Color]::DimGray
-$sliderMinLabel.TextAlign = "MiddleLeft"
-$form.Controls.Add($sliderMinLabel)
-
-$sliderMidLabel = New-Object System.Windows.Forms.Label
-$sliderMidLabel.Location = New-Object System.Drawing.Point(200, 312)
-$sliderMidLabel.Size = New-Object System.Drawing.Size(70, 20)
-$sliderMidLabel.Text = "1.0x"
-$sliderMidLabel.Font = New-Object System.Drawing.Font("Segoe UI", 9)
-$sliderMidLabel.ForeColor = [System.Drawing.Color]::DimGray
-$sliderMidLabel.TextAlign = "MiddleCenter"
-$form.Controls.Add($sliderMidLabel)
-
-$sliderMaxLabel = New-Object System.Windows.Forms.Label
-$sliderMaxLabel.Location = New-Object System.Drawing.Point(420, 312)
-$sliderMaxLabel.Size = New-Object System.Drawing.Size(50, 20)
-$sliderMaxLabel.Text = "3.0x"
-$sliderMaxLabel.Font = New-Object System.Drawing.Font("Segoe UI", 9)
-$sliderMaxLabel.ForeColor = [System.Drawing.Color]::DimGray
-$sliderMaxLabel.TextAlign = "MiddleRight"
-$form.Controls.Add($sliderMaxLabel)
-
-# Slider description
-$sliderDescLabel = New-Object System.Windows.Forms.Label
-$sliderDescLabel.Location = New-Object System.Drawing.Point(250, 245)
-$sliderDescLabel.Size = New-Object System.Drawing.Size(220, 20)
-$sliderDescLabel.Text = "(Adjust encoding quality/file size)"
-$sliderDescLabel.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Italic)
-$sliderDescLabel.ForeColor = [System.Drawing.Color]::Gray
-$sliderDescLabel.TextAlign = "MiddleLeft"
-$form.Controls.Add($sliderDescLabel)
-
-# Default values note
-$noteLabel = New-Object System.Windows.Forms.Label
-$noteLabel.Location = New-Object System.Drawing.Point(10, 337)
-$noteLabel.Size = New-Object System.Drawing.Size(460, 40)
-$noteLabel.Text = "Note: Default values from config.ps1 are pre-selected.`nYou can change them before starting the conversion."
-$noteLabel.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Italic)
-$noteLabel.ForeColor = [System.Drawing.Color]::Gray
-$form.Controls.Add($noteLabel)
-
-# OK Button
-$okButton = New-Object System.Windows.Forms.Button
-$okButton.Location = New-Object System.Drawing.Point(270, 380)
-$okButton.Size = New-Object System.Drawing.Size(100, 30)
-$okButton.Text = "Start"
-$okButton.DialogResult = [System.Windows.Forms.DialogResult]::OK
-$okButton.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
-$form.AcceptButton = $okButton
-$form.Controls.Add($okButton)
-
-# Cancel Button
-$cancelButton = New-Object System.Windows.Forms.Button
-$cancelButton.Location = New-Object System.Drawing.Point(380, 380)
-$cancelButton.Size = New-Object System.Drawing.Size(100, 30)
-$cancelButton.Text = "Cancel"
-$cancelButton.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
-$cancelButton.Font = New-Object System.Drawing.Font("Segoe UI", 10)
-$form.CancelButton = $cancelButton
-$form.Controls.Add($cancelButton)
-
-# Show the form
-$result = $form.ShowDialog()
-
-if ($result -eq [System.Windows.Forms.DialogResult]::Cancel) {
+# Check if user cancelled
+if ($uiResult.Cancelled) {
     Write-Host "`nConversion cancelled by user." -ForegroundColor Yellow
     exit
 }
 
 # Apply selected values
-$OutputCodec = if ($codecCombo.SelectedIndex -eq 0) { "HEVC" } else { "AV1" }
+$OutputCodec = $uiResult.Codec
 $DefaultVideoCodec = $CodecMap[$OutputCodec]
-$PreserveContainer = ($containerCombo.SelectedIndex -eq 0)
-$PreserveAudio = ($audioCombo.SelectedIndex -eq 0)
-$BitrateMultiplier = $bitrateSlider.Value / 10.0
+$PreserveContainer = $uiResult.PreserveContainer
+$PreserveAudio = $uiResult.PreserveAudio
+$BitrateMultiplier = $uiResult.BitrateMultiplier
 
 Write-Host "`n========================================" -ForegroundColor Cyan
 Write-Host "  CONVERSION SETTINGS" -ForegroundColor Cyan

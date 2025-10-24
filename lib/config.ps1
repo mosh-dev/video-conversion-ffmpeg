@@ -60,7 +60,7 @@ $DefaultAudioBitrate = "256k"     # Bitrate for audio encoding
 
 $OutputExtension = ".mp4"         # Output file extension (.mkv, .mp4, .webm)
 $PreserveContainer = $false       # Set to $true to keep original container format (mkv->mkv, mp4->mp4, etc.)
-$PreserveAudio = $false           # Set to $true to copy audio without re-encoding (WARNING: DTS audio won't play in many players)
+$PreserveAudio = $true            # Set to $true to copy audio without re-encoding (WARNING: DTS audio won't play in many players)
 
 
 # ============================================================================
@@ -73,7 +73,7 @@ $UseDynamicParameters = $true
 
 # Bitrate Modifier (multiplier for all bitrate values)
 # 1.0 = use values as-is, 1.1 = 10% increase, 1.5 = 50% increase, 0.8 = 20% decrease
-$BitrateMultiplier = 1
+$BitrateMultiplier = 0.8
 
 # Parameter Mapping: Define bitrate and preset based on resolution and FPS ranges
 $ParameterMap = @(

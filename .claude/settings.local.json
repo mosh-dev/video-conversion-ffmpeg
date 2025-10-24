@@ -8,7 +8,11 @@
       "Bash(powershell -ExecutionPolicy Bypass -File \".\\test_encoding.ps1\")",
       "Bash(powershell -Command:*)",
       "Bash(powershell:*)",
-      "Bash(ffprobe:*)"
+      "Bash(ffprobe:*)",
+      "Bash(dotnet --version:*)",
+      "Bash(dotnet restore:*)",
+      "Bash(dotnet build:*)",
+      "Bash(mkdir:*)"
     ],
     "deny": [],
     "ask": []
