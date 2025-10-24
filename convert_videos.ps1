@@ -493,7 +493,7 @@ foreach ($File in $VideoFiles) {
     # Full GPU pipeline: decode on GPU -> scale/format on GPU -> download to system memory for encoder
     # hwdownload is needed because NVENC encoder expects frames in system memory
     $FFmpegArgs += @(
-        "-vf", "scale_cuda=format=nv12,hwdownload,format=nv12,colorspace=all=bt709"
+        "-vf", "scale_cuda=format=p010le"
     )
 
     # Add video encoding parameters
@@ -512,9 +512,6 @@ foreach ($File in $VideoFiles) {
             "-tune:v", "hq",
             "-rc:v", "vbr",
             "-tier:v", "0",
-            "-colorspace", "bt709",
-            "-color_primaries", "bt709",
-            "-color_trc", "bt709",
             "-movflags", "+faststart+write_colr"
         )
     } elseif ($DefaultVideoCodec -eq "hevc_nvenc") {
@@ -522,9 +519,6 @@ foreach ($File in $VideoFiles) {
             "-tune:v", "hq",
             "-rc:v", "vbr",
             "-tier:v", "0",
-            "-colorspace", "bt709",
-            "-color_primaries", "bt709",
-            "-color_trc", "bt709",
             "-movflags", "+faststart"
         )
     }
