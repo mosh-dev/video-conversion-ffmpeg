@@ -73,7 +73,7 @@ $UseDynamicParameters = $true
 
 # Bitrate Modifier (multiplier for all bitrate values)
 # 1.0 = use values as-is, 1.1 = 10% increase, 1.5 = 50% increase, 0.8 = 20% decrease
-$BitrateModifier = 1
+$BitrateMultiplier = 1
 
 # Parameter Mapping: Define bitrate and preset based on resolution and FPS ranges
 $ParameterMap = @(

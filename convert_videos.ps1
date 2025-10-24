@@ -104,7 +104,7 @@ $form.Controls.Add($bitrateLabel)
 $bitrateValueLabel = New-Object System.Windows.Forms.Label
 $bitrateValueLabel.Location = New-Object System.Drawing.Point(165, 245)
 $bitrateValueLabel.Size = New-Object System.Drawing.Size(60, 20)
-$bitrateValueLabel.Text = $BitrateModifier.ToString("0.0") + "x"
+$bitrateValueLabel.Text = $BitrateMultiplier.ToString("0.0") + "x"
 $bitrateValueLabel.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
 $bitrateValueLabel.TextAlign = "MiddleLeft"
 $bitrateValueLabel.ForeColor = [System.Drawing.Color]::FromArgb(0, 102, 204)
@@ -114,9 +114,9 @@ $form.Controls.Add($bitrateValueLabel)
 $bitrateSlider = New-Object System.Windows.Forms.TrackBar
 $bitrateSlider.Location = New-Object System.Drawing.Point(10, 270)
 $bitrateSlider.Size = New-Object System.Drawing.Size(460, 45)
-$bitrateSlider.Minimum = 5  # 0.5x (will divide by 10)
+$bitrateSlider.Minimum = 1  # 0.1x (will divide by 10)
 $bitrateSlider.Maximum = 30  # 3.0x (will divide by 10)
-$bitrateSlider.Value = [int]($BitrateModifier * 10)
+$bitrateSlider.Value = [int]($BitrateMultiplier * 10)
 $bitrateSlider.TickFrequency = 5
 $bitrateSlider.SmallChange = 1
 $bitrateSlider.LargeChange = 5
@@ -129,11 +129,11 @@ $bitrateSlider.Add_ValueChanged({
 $form.Controls.Add($bitrateSlider)
 
 # Slider guide labels - positioned to align with actual slider thumb positions
-# TrackBar has ~9px margin on each side, so usable width is ~442px for range 5-30 (25 steps)
+# TrackBar has ~9px margin on each side, so usable width is ~442px for range 1-30 (29 steps)
 $sliderMinLabel = New-Object System.Windows.Forms.Label
 $sliderMinLabel.Location = New-Object System.Drawing.Point(8, 312)
 $sliderMinLabel.Size = New-Object System.Drawing.Size(50, 20)
-$sliderMinLabel.Text = "0.5x"
+$sliderMinLabel.Text = "0.1x"
 $sliderMinLabel.Font = New-Object System.Drawing.Font("Segoe UI", 9)
 $sliderMinLabel.ForeColor = [System.Drawing.Color]::DimGray
 $sliderMinLabel.TextAlign = "MiddleLeft"
@@ -209,7 +209,7 @@ $OutputCodec = if ($codecCombo.SelectedIndex -eq 0) { "HEVC" } else { "AV1" }
 $DefaultVideoCodec = $CodecMap[$OutputCodec]
 $PreserveContainer = ($containerCombo.SelectedIndex -eq 0)
 $PreserveAudio = ($audioCombo.SelectedIndex -eq 0)
-$BitrateModifier = $bitrateSlider.Value / 10.0
+$BitrateMultiplier = $bitrateSlider.Value / 10.0
 
 Write-Host "`n========================================" -ForegroundColor Cyan
 Write-Host "  CONVERSION SETTINGS" -ForegroundColor Cyan
@@ -219,7 +219,7 @@ Write-Host "  Container: " -NoNewline -ForegroundColor White
 Write-Host $(if ($PreserveContainer) { "Preserve original" } else { "Convert to $OutputExtension" }) -ForegroundColor White
 Write-Host "  Audio: " -NoNewline -ForegroundColor White
 Write-Host $(if ($PreserveAudio) { "Copy original" } else { "Re-encode to $($AudioCodec.ToUpper())" }) -ForegroundColor White
-Write-Host "  Bitrate Modifier: $($BitrateModifier.ToString('0.0'))x" -ForegroundColor White
+Write-Host "  Bitrate Modifier: $($BitrateMultiplier.ToString('0.0'))x" -ForegroundColor White
 Write-Host "========================================`n" -ForegroundColor Cyan
 
 # Generate timestamped log filename
@@ -318,7 +318,7 @@ function Get-VideoMetadata {
 }
 
 # Function to apply bitrate modifier to a bitrate string (e.g., "20M" -> "22M")
-function Set-BitrateModifier {
+function Set-BitrateMultiplier {
     param(
         [string]$Bitrate,
         [double]$Modifier
@@ -451,9 +451,9 @@ function Get-DynamicParameters {
         if ($FPS -ge $ResProfile.FPSMin -and $FPS -le $ResProfile.FPSMax) {
             # Apply bitrate modifier to all bitrate values
             $ModifiedRule = $ResProfile.Clone()
-            $ModifiedRule.VideoBitrate = Set-BitrateModifier -Bitrate $ResProfile.VideoBitrate -Modifier $BitrateModifier
-            $ModifiedRule.MaxRate = Set-BitrateModifier -Bitrate $ResProfile.MaxRate -Modifier $BitrateModifier
-            $ModifiedRule.BufSize = Set-BitrateModifier -Bitrate $ResProfile.BufSize -Modifier $BitrateModifier
+            $ModifiedRule.VideoBitrate = Set-BitrateMultiplier -Bitrate $ResProfile.VideoBitrate -Modifier $BitrateMultiplier
+            $ModifiedRule.MaxRate = Set-BitrateMultiplier -Bitrate $ResProfile.MaxRate -Modifier $BitrateMultiplier
+            $ModifiedRule.BufSize = Set-BitrateMultiplier -Bitrate $ResProfile.BufSize -Modifier $BitrateMultiplier
             return $ModifiedRule
         }
     }
@@ -480,16 +480,16 @@ function Get-DynamicParameters {
     if ($ClosestProfile) {
         # Apply bitrate modifier to all bitrate values
         $ModifiedRule = $ClosestProfile.Clone()
-        $ModifiedRule.VideoBitrate = Set-BitrateModifier -Bitrate $ClosestProfile.VideoBitrate -Modifier $BitrateModifier
-        $ModifiedRule.MaxRate = Set-BitrateModifier -Bitrate $ClosestProfile.MaxRate -Modifier $BitrateModifier
-        $ModifiedRule.BufSize = Set-BitrateModifier -Bitrate $ClosestProfile.BufSize -Modifier $BitrateModifier
+        $ModifiedRule.VideoBitrate = Set-BitrateMultiplier -Bitrate $ClosestProfile.VideoBitrate -Modifier $BitrateMultiplier
+        $ModifiedRule.MaxRate = Set-BitrateMultiplier -Bitrate $ClosestProfile.MaxRate -Modifier $BitrateMultiplier
+        $ModifiedRule.BufSize = Set-BitrateMultiplier -Bitrate $ClosestProfile.BufSize -Modifier $BitrateMultiplier
         return $ModifiedRule
     }
 
     # Default fallback (should not reach here if map is properly configured)
-    $FallbackBitrate = Set-BitrateModifier -Bitrate "15M" -Modifier $BitrateModifier
-    $FallbackMaxRate = Set-BitrateModifier -Bitrate "25M" -Modifier $BitrateModifier
-    $FallbackBufSize = Set-BitrateModifier -Bitrate "30M" -Modifier $BitrateModifier
+    $FallbackBitrate = Set-BitrateMultiplier -Bitrate "15M" -Modifier $BitrateMultiplier
+    $FallbackMaxRate = Set-BitrateMultiplier -Bitrate "25M" -Modifier $BitrateMultiplier
+    $FallbackBufSize = Set-BitrateMultiplier -Bitrate "30M" -Modifier $BitrateMultiplier
     return @{ ProfileName = "Fallback Default"; VideoBitrate = $FallbackBitrate; MaxRate = $FallbackMaxRate; BufSize = $FallbackBufSize; Preset = "p7" }
 }
 
@@ -572,8 +572,7 @@ foreach ($File in $VideoFiles) {
 
 
     # Get input file size (use $File object directly to avoid path issues)
-    $InputSize = $File.Length / 1MB
-    $InputSizeMB = [math]::Round($InputSize, 2)
+    $InputSizeMB = [math]::Round($File.Length / 1MB, 2)
 
     # Get video metadata and apply dynamic parameters if enabled
     $SourceBitrate = 0
@@ -742,11 +741,10 @@ foreach ($File in $VideoFiles) {
             # Wait briefly and force file system refresh to get accurate file size
             Start-Sleep -Milliseconds 100
             $TempOutputFile = Get-Item -LiteralPath $TempOutputPath -Force
-            $OutputSize = $TempOutputFile.Length / 1MB
+            $OutputSizeMB = [math]::Round($TempOutputFile.Length / 1MB, 2)
 
             $DurationStr = "{0:mm\:ss}" -f $Duration
             $TimeStr = "{0:hh\:mm\:ss}" -f $Duration
-            $OutputSizeMB = [math]::Round($OutputSize, 2)
 
             # Rename temp file to final output file
             try {

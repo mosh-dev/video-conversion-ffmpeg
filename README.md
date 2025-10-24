@@ -7,7 +7,7 @@ A powerful batch video conversion tool with GPU acceleration, featuring an inter
 - **GPU-Accelerated Encoding**: Leverage NVIDIA NVENC for fast AV1 and HEVC encoding
 - **Interactive GUI Launcher**: Configure all settings through an intuitive interface
 - **Smart Parameter Selection**: Automatically adjusts encoding parameters based on resolution and framerate
-- **Bitrate Control**: Fine-tune output quality with an adjustable bitrate slider (0.5x to 3.0x)
+- **Bitrate Control**: Fine-tune output quality with an adjustable bitrate slider (0.1x to 3.0x)
 - **Intelligent Bitrate Limiting**: Never exceeds source video bitrate to avoid quality loss
 - **Batch Processing**: Convert multiple videos with a single command
 - **Comprehensive Logging**: Timestamped logs with detailed conversion statistics
@@ -61,7 +61,7 @@ When you run the script, a GUI window appears with the following options:
 - **Re-encode to AAC/Opus**: Universal compatibility, slightly slower
 
 #### Bitrate Multiplier
-- Slider from **0.5x to 3.0x**
+- Slider from **0.1x to 3.0x**
 - Lower values = smaller files, lower quality
 - Higher values = larger files, higher quality
 - **1.0x** = use profile defaults
@@ -73,7 +73,7 @@ Edit `config.ps1` to customize:
 ```powershell
 # Processing Options
 $SkipExistingFiles = $true        # Skip already-converted files
-$FileExtensions = @("*.mp4", "*.mov", "*.mkv", "*.wmv")
+$FileExtensions = @("*.mp4", "*.mov", "*.mkv", "*.wmv", "*.ts", "*.m2ts", "*.m4v")
 
 # Default Codec (can be changed in GUI)
 $OutputCodec = "AV1"               # "AV1" or "HEVC"
@@ -89,7 +89,7 @@ $PreserveAudio = $false            # Override in GUI
 
 # Dynamic Parameters
 $UseDynamicParameters = $true      # Enable resolution/FPS-based encoding
-$BitrateModifier = 1               # Override in GUI
+$BitrateMultiplier = 1             # Override in GUI
 ```
 
 ### Encoding Profiles
@@ -155,7 +155,7 @@ VideoConversion/
   Codec: AV1
   Container: Preserve original
   Audio: Re-encode to AAC
-  Bitrate Modifier: 1.0x
+  Bitrate Multiplier: 1.0x
 ========================================
 
 Converting 5 files | Codec: AV1 | Mode: Dynamic | Audio: AAC @ 256k | Container: Original | Files: Skip existing
@@ -228,7 +228,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 **Problem**: Output files are larger than expected
 
 **Solution**:
-1. Lower the **Bitrate Multiplier** slider (try 0.8x or 0.7x)
+1. Lower the **Bitrate Multiplier** slider (try 0.8x, 0.7x, or even lower)
 2. Verify source video quality - encoding can't exceed source bitrate
 3. Check if source video is already highly compressed
 
@@ -261,6 +261,9 @@ ffprobe -v error -select_streams v:0 -show_entries stream=width,height,r_frame_r
 - MOV (.mov)
 - MKV (.mkv)
 - WMV (.wmv)
+- TS (.ts)
+- M2TS (.m2ts)
+- M4V (.m4v)
 
 ### Output Formats
 - MP4 (.mp4) - Recommended for compatibility
@@ -290,7 +293,7 @@ A:
 **Q: What does the bitrate multiplier do?**
 
 A: It scales all encoding bitrates. For example:
-- 0.5x = halves bitrate (smaller files, lower quality)
+- 0.1x = very low bitrate (smallest files, lower quality)
 - 1.0x = uses profile defaults
 - 2.0x = doubles bitrate (larger files, higher quality)
 
