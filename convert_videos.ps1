@@ -635,10 +635,9 @@ foreach ($File in $VideoFiles) {
     }
 
     # Build ffmpeg command
-    # Use -hwaccel auto to allow fallback to CPU decode if CUDA decode is not available
-    # Frames will still be uploaded to GPU for encoding
+    # Use -hwaccel cuda with output format cuda for full GPU pipeline
     $FFmpegArgs = @(
-        "-hwaccel", "auto",
+        "-hwaccel", "cuda",
         "-hwaccel_output_format", "cuda",
         "-i", $InputPath
     )
@@ -656,11 +655,10 @@ foreach ($File in $VideoFiles) {
         )
     }
 
-    # Add GPU filter for format conversion
-    # hwupload_cuda ensures frames reach GPU even if CPU decode was used
-    # scale_cuda converts to NV12 format on GPU for NVENC
+    # Full GPU pipeline: decode on GPU -> scale/format on GPU -> download to system memory for encoder
+    # hwdownload is needed because NVENC encoder expects frames in system memory
     $FFmpegArgs += @(
-        "-vf", "hwupload_cuda,scale_cuda=format=nv12"
+        "-vf", "scale_cuda=format=nv12,hwdownload,format=nv12"
     )
 
     # Add video encoding parameters
@@ -679,7 +677,6 @@ foreach ($File in $VideoFiles) {
             "-tune:v", "hq",
             "-rc:v", "vbr",
             "-tier:v", "0",
-            "-pix_fmt", "yuv420p",
             "-colorspace", "bt709",
             "-color_primaries", "bt709",
             "-color_trc", "bt709",
@@ -690,7 +687,6 @@ foreach ($File in $VideoFiles) {
             "-tune:v", "hq",
             "-rc:v", "vbr",
             "-tier:v", "0",
-            "-pix_fmt", "yuv420p",
             "-colorspace", "bt709",
             "-color_primaries", "bt709",
             "-color_trc", "bt709",
