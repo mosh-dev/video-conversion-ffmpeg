@@ -635,8 +635,11 @@ foreach ($File in $VideoFiles) {
     }
 
     # Build ffmpeg command
+    # Use -hwaccel auto to allow fallback to CPU decode if CUDA decode is not available
+    # Frames will still be uploaded to GPU for encoding
     $FFmpegArgs = @(
-        "-hwaccel", $DefaultHWAccel,
+        "-hwaccel", "auto",
+        "-hwaccel_output_format", "cuda",
         "-i", $InputPath
     )
 
@@ -652,6 +655,13 @@ foreach ($File in $VideoFiles) {
             "-ignore_unknown"     # Ignore unknown streams
         )
     }
+
+    # Add GPU filter for format conversion
+    # hwupload_cuda ensures frames reach GPU even if CPU decode was used
+    # scale_cuda converts to NV12 format on GPU for NVENC
+    $FFmpegArgs += @(
+        "-vf", "hwupload_cuda,scale_cuda=format=nv12"
+    )
 
     # Add video encoding parameters
     $FFmpegArgs += @(
