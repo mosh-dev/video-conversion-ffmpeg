@@ -1,14 +1,13 @@
-# Input and output directories
-input_files/
-output_files/
-logs/
+# Ignore all files inside these directories, but keep the folders
+input_files/*
+!input_files/.gitkeep
+output_files/*
+!output_files/.gitkeep
+logs/*
+!logs/.gitkeep
 
 # IDE configuration
 .idea/
-
-# Logs
-conversion_log.txt
-conversion_logs/
 
 # Temporary files
 *.tmp

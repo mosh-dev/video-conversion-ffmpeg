@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Purpose
 
-This is a video conversion workspace for batch converting video files (MP4, MOV, MKV, WMV) to AV1 or HEVC format using ffmpeg with NVIDIA CUDA hardware acceleration.
+This is a video conversion workspace for batch converting video files (MP4, MOV, MKV, WMV) to AV1 or HEVC format using ffmpeg with NVIDIA CUDA hardware acceleration. The tool features an interactive GUI launcher and comprehensive parameter customization.
 
 ## Architecture
 
@@ -35,18 +35,26 @@ This separation allows users to modify settings without touching the script logi
 .\convert_videos.ps1
 ```
 
-All configuration is done in `config.ps1` before running the script.
+The script launches an interactive GUI where users can configure:
+- Video codec (AV1 or HEVC)
+- Container format (preserve original or convert to specified format)
+- Audio encoding (copy original or re-encode)
+- Bitrate multiplier (0.5x to 3.0x via slider)
+
+Default values are loaded from `config.ps1` and can be adjusted before starting conversion.
 
 ## Configuration (config.ps1)
 
 All parameters are configured in `config.ps1`:
 
 **Essential Settings:**
-- `$OutputCodec` - Choose "AV1" or "HEVC" codec
+- `$OutputCodec` - Choose "AV1" or "HEVC" codec (can be overridden in GUI)
 - `$SkipExistingFiles` - Set to `$true` to skip already-converted files (recommended)
 - `$UseDynamicParameters` - Enable resolution/FPS-based parameter adjustment
-- `$PreserveContainer` - Keep original container format (mkv > mkv, mp4 > mp4)
-- `$PreserveAudio` - Copy audio without re-encoding (faster, but may have compatibility issues with DTS)
+- `$PreserveContainer` - Keep original container format (can be overridden in GUI)
+- `$PreserveAudio` - Copy audio without re-encoding (can be overridden in GUI)
+- `$AudioCodec` - Choose "opus" or "aac" for audio encoding
+- `$BitrateModifier` - Global bitrate multiplier, adjustable via GUI slider (0.5x to 3.0x)
 
 **Parameter Profiles:**
 
@@ -57,23 +65,29 @@ The `$ParameterMap` array in config.ps1 defines encoding parameters for differen
 
 ## Script Features
 
+- **Interactive GUI launcher** with parameter selection before conversion starts
 - Automatic video metadata detection (resolution, framerate, bitrate) via ffprobe
 - Dynamic parameter selection based on video properties
 - **Bitrate limiting**: Automatically adjusts encoding bitrate to not exceed source bitrate
+- Real-time bitrate adjustment via GUI slider (0.5x to 3.0x)
 - Compression statistics (input/output size, compression ratio, space saved %)
 - Progress tracking with colored console output
 - Timestamped logging to `logs/conversion_YYYY-MM-DD_HH-MM-SS.txt` (unique log per run)
 - Skip existing files to avoid reconversion
+- Automatic cleanup of incomplete conversions (.tmp files) from previous runs
 - Manual exit prompt to review final statistics
 - Special handling for MKV files (stream mapping to avoid subtitle/attachment issues)
+- Enhanced VLC/player compatibility with color metadata and format flags
 
 ## Requirements
 
+- Windows PowerShell 5.1 or later
 - ffmpeg with NVIDIA hardware acceleration support
 - NVIDIA GPU with NVENC support:
   - AV1 encoding: RTX 40-series or newer
   - HEVC encoding: GTX 10-series or newer
 - CUDA drivers installed
+- .NET Framework (for GUI components)
 
 ## Claude Code Permissions
 
