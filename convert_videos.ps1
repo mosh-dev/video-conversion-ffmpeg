@@ -491,7 +491,6 @@ foreach ($File in $VideoFiles) {
     }
 
     # Full GPU pipeline: decode on GPU -> scale/format on GPU -> download to system memory for encoder
-    # hwdownload is needed because NVENC encoder expects frames in system memory
     $FFmpegArgs += @(
         "-vf", "scale_cuda=format=p010le"
     )
