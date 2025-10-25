@@ -18,10 +18,10 @@ $QualityColors = @{
 # ============================================================================
 
 function Show-FormattedReport {
-    param([string]$CsvPath)
+    param([string]$JsonPath)
 
-    # Read CSV file
-    $reportData = Import-Csv -Path $CsvPath -Encoding UTF8
+    # Read JSON file
+    $reportData = Get-Content -Path $JsonPath -Encoding UTF8 -Raw | ConvertFrom-Json
 
     if ($reportData.Count -eq 0) {
         Write-Host "`nNo data found in report." -ForegroundColor Yellow
@@ -31,53 +31,44 @@ function Show-FormattedReport {
     Write-Host "`n========================================" -ForegroundColor Cyan
     Write-Host "  QUALITY COMPARISON REPORT" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host "Report: $(Split-Path $CsvPath -Leaf)" -ForegroundColor Gray
+    Write-Host "Report: $(Split-Path $JsonPath -Leaf)" -ForegroundColor Gray
     Write-Host ""
 
-    # Display each file comparison
+    # Display each file comparison (compact format)
     $fileNumber = 0
     foreach ($row in $reportData) {
         $fileNumber++
-
-        Write-Host "[$fileNumber/$($reportData.Count)] " -NoNewline -ForegroundColor White
-        Write-Host "$($row.FileName)" -ForegroundColor Cyan
-
-        Write-Host "  Source:  $($row.SourceFile) ($($row.SourceSizeMB) MB)" -ForegroundColor White
-        Write-Host "  Encoded: $($row.EncodedFile) ($($row.EncodedSizeMB) MB)" -ForegroundColor White
-        Write-Host "  Compression: $($row.CompressionRatio)x ($($row.SpaceSavedPercent)% saved)" -ForegroundColor Gray
-        Write-Host "  Resolution: $($row.SourceResolution) -> $($row.EncodedResolution)" -ForegroundColor Gray
-        Write-Host "  Bitrate: $($row.SourceBitrateMbps) Mbps -> $($row.EncodedBitrateMbps) Mbps" -ForegroundColor Gray
-        Write-Host "  Duration: $($row.DurationSeconds)s | Analysis Time: $($row.AnalysisTimeSeconds)s" -ForegroundColor Gray
-
-        Write-Host ""
-        Write-Host "  +-- Quality Metrics ---------------------+" -ForegroundColor DarkGray
 
         # Get quality color
         $qualityColor = $QualityColors[$row.QualityAssessment]
         if (-not $qualityColor) { $qualityColor = "White" }
 
-        Write-Host "  | VMAF: " -NoNewline -ForegroundColor White
-        Write-Host "$($row.VMAF.ToString().PadRight(5)) / 100" -NoNewline -ForegroundColor $qualityColor
-        Write-Host "                  |" -ForegroundColor DarkGray
-
-        Write-Host "  | SSIM: " -NoNewline -ForegroundColor White
-        Write-Host "$($row.SSIM.ToString().PadRight(6)) / 1.00" -NoNewline -ForegroundColor $qualityColor
-        Write-Host "                 |" -ForegroundColor DarkGray
-
-        Write-Host "  | PSNR: " -NoNewline -ForegroundColor White
-        Write-Host "$($row.PSNR.ToString().PadRight(5)) dB" -NoNewline -ForegroundColor $qualityColor
-        Write-Host "                      |" -ForegroundColor DarkGray
-
-        Write-Host "  +-----------------------------------------+" -ForegroundColor DarkGray
-
-        Write-Host "  Assessment: " -NoNewline -ForegroundColor White
+        # Line 1: File name and assessment
+        Write-Host "[$fileNumber/$($reportData.Count)] " -NoNewline -ForegroundColor White
+        Write-Host "$($row.FileName)" -NoNewline -ForegroundColor Cyan
+        Write-Host " - " -NoNewline -ForegroundColor DarkGray
         Write-Host "$($row.QualityAssessment)" -ForegroundColor $qualityColor
 
-        Write-Host ""
+        # Line 2: File info
+        Write-Host "  $($row.SourceSizeMB)MB -> $($row.EncodedSizeMB)MB " -NoNewline -ForegroundColor Gray
+        Write-Host "($($row.CompressionRatio)x, $($row.SpaceSavedPercent)% saved)" -NoNewline -ForegroundColor Gray
+        Write-Host " | " -NoNewline -ForegroundColor DarkGray
+        Write-Host "$($row.SourceResolution) -> $($row.EncodedResolution)" -NoNewline -ForegroundColor Gray
+        Write-Host " | " -NoNewline -ForegroundColor DarkGray
+        Write-Host "$($row.SourceBitrateMbps)->$($row.EncodedBitrateMbps)Mbps" -ForegroundColor Gray
+
+        # Line 3: Quality metrics
+        Write-Host "  VMAF: " -NoNewline -ForegroundColor White
+        Write-Host "$($row.VMAF)" -NoNewline -ForegroundColor $qualityColor
+        Write-Host " | SSIM: " -NoNewline -ForegroundColor White
+        Write-Host "$($row.SSIM)" -NoNewline -ForegroundColor $qualityColor
+        Write-Host " | PSNR: " -NoNewline -ForegroundColor White
+        Write-Host "$($row.PSNR)dB" -NoNewline -ForegroundColor $qualityColor
+        Write-Host " | " -NoNewline -ForegroundColor DarkGray
+        Write-Host "Analysis: $($row.AnalysisTimeSeconds)s" -ForegroundColor DarkGray
 
         # Add separator between files (except for last one)
         if ($fileNumber -lt $reportData.Count) {
-            Write-Host "----------------------------------------" -ForegroundColor DarkGray
             Write-Host ""
         }
     }
@@ -95,36 +86,35 @@ function Show-FormattedReport {
     $acceptableCount = ($reportData | Where-Object { $_.QualityAssessment -eq "Acceptable" }).Count
     $poorCount = ($reportData | Where-Object { $_.QualityAssessment -eq "Poor" }).Count
 
+    Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "  SUMMARY" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host ""
 
-    Write-Host "Files Compared:       $($reportData.Count)" -ForegroundColor White
-    Write-Host "Total Analysis Time:  $totalAnalysisTime seconds" -ForegroundColor White
-    Write-Host ""
-    Write-Host "Average Metrics:" -ForegroundColor White
-    Write-Host "  VMAF: " -NoNewline -ForegroundColor White
-    Write-Host "$avgVMAF / 100" -ForegroundColor Cyan
-    Write-Host "  SSIM: " -NoNewline -ForegroundColor White
-    Write-Host "$avgSSIM / 1.00" -ForegroundColor Cyan
-    Write-Host "  PSNR: " -NoNewline -ForegroundColor White
-    Write-Host "$avgPSNR dB" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "Average Compression:  ${avgCompression}x (${avgSpaceSaved}% space saved)" -ForegroundColor White
-    Write-Host ""
-    Write-Host "Quality Distribution:" -ForegroundColor White
-    if ($excellentCount -gt 0) {
-        Write-Host "  Excellent:   $excellentCount" -ForegroundColor Green
-    }
-    if ($veryGoodCount -gt 0) {
-        Write-Host "  Very Good:   $veryGoodCount" -ForegroundColor Cyan
-    }
-    if ($acceptableCount -gt 0) {
-        Write-Host "  Acceptable:  $acceptableCount" -ForegroundColor Yellow
-    }
-    if ($poorCount -gt 0) {
-        Write-Host "  Poor:        $poorCount" -ForegroundColor Red
+    Write-Host "Files: $($reportData.Count) | " -NoNewline -ForegroundColor White
+    Write-Host "Avg Quality - VMAF: " -NoNewline -ForegroundColor White
+    Write-Host "$avgVMAF" -NoNewline -ForegroundColor Cyan
+    Write-Host " | SSIM: " -NoNewline -ForegroundColor White
+    Write-Host "$avgSSIM" -NoNewline -ForegroundColor Cyan
+    Write-Host " | PSNR: " -NoNewline -ForegroundColor White
+    Write-Host "${avgPSNR}dB" -ForegroundColor Cyan
+
+    Write-Host "Avg Compression: " -NoNewline -ForegroundColor White
+    Write-Host "${avgCompression}x (${avgSpaceSaved}% saved)" -NoNewline -ForegroundColor Cyan
+    Write-Host " | Analysis Time: " -NoNewline -ForegroundColor White
+    Write-Host "${totalAnalysisTime}s" -ForegroundColor Cyan
+
+    Write-Host "Quality: " -NoNewline -ForegroundColor White
+    $qualityParts = @()
+    if ($excellentCount -gt 0) { $qualityParts += "Excellent:$excellentCount" }
+    if ($veryGoodCount -gt 0) { $qualityParts += "VeryGood:$veryGoodCount" }
+    if ($acceptableCount -gt 0) { $qualityParts += "Acceptable:$acceptableCount" }
+    if ($poorCount -gt 0) { $qualityParts += "Poor:$poorCount" }
+
+    if ($qualityParts.Count -gt 0) {
+        Write-Host ($qualityParts -join " | ") -ForegroundColor White
+    } else {
+        Write-Host "No quality data" -ForegroundColor DarkGray
     }
     Write-Host ""
 }
@@ -144,21 +134,21 @@ if (-not (Test-Path $ReportDir)) {
     exit 1
 }
 
-# Get all CSV files sorted by creation time (newest first)
-$csvFiles = Get-ChildItem -Path $ReportDir -Filter "*.csv" -File -ErrorAction SilentlyContinue |
-            Sort-Object LastWriteTime -Descending
+# Get all JSON files sorted by creation time (newest first)
+$jsonFiles = Get-ChildItem -Path $ReportDir -Filter "*.json" -File -ErrorAction SilentlyContinue |
+             Sort-Object LastWriteTime -Descending
 
-if ($csvFiles.Count -eq 0) {
-    Write-Host "No CSV reports found in $ReportDir" -ForegroundColor Yellow
+if ($jsonFiles.Count -eq 0) {
+    Write-Host "No JSON reports found in $ReportDir" -ForegroundColor Yellow
     Write-Host "Run compare_quality.ps1 first to generate reports.`n" -ForegroundColor Yellow
     exit 0
 }
 
-Write-Host "Found $($csvFiles.Count) report(s):`n" -ForegroundColor Green
+Write-Host "Found $($jsonFiles.Count) report(s):`n" -ForegroundColor Green
 
 # Display list of reports
-for ($i = 0; $i -lt $csvFiles.Count; $i++) {
-    $file = $csvFiles[$i]
+for ($i = 0; $i -lt $jsonFiles.Count; $i++) {
+    $file = $jsonFiles[$i]
     $number = $i + 1
     $date = $file.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss")
     $sizeKB = [math]::Round($file.Length / 1KB, 2)
@@ -173,7 +163,7 @@ Write-Host ""
 # Prompt user to select a report
 $selection = $null
 while ($true) {
-    Write-Host "Select a report [1-$($csvFiles.Count)] or 'Q' to quit: " -NoNewline -ForegroundColor Yellow
+    Write-Host "Select a report [1-$($jsonFiles.Count)] or 'Q' to quit: " -NoNewline -ForegroundColor Yellow
     $input = Read-Host
 
     if ($input -eq 'Q' -or $input -eq 'q') {
@@ -183,17 +173,17 @@ while ($true) {
 
     if ($input -match '^\d+$') {
         $selection = [int]$input
-        if ($selection -ge 1 -and $selection -le $csvFiles.Count) {
+        if ($selection -ge 1 -and $selection -le $jsonFiles.Count) {
             break
         }
     }
 
-    Write-Host "Invalid selection. Please enter a number between 1 and $($csvFiles.Count).`n" -ForegroundColor Red
+    Write-Host "Invalid selection. Please enter a number between 1 and $($jsonFiles.Count).`n" -ForegroundColor Red
 }
 
 # Display selected report
-$selectedFile = $csvFiles[$selection - 1]
-Show-FormattedReport -CsvPath $selectedFile.FullName
+$selectedFile = $jsonFiles[$selection - 1]
+Show-FormattedReport -JsonPath $selectedFile.FullName
 
 # Option to view another report or export
 Write-Host ""
@@ -217,7 +207,7 @@ while ($true) {
         exit 0
     } elseif ($action -eq 'E' -or $action -eq 'e') {
         # Export to text file
-        $reportData = Import-Csv -Path $selectedFile.FullName -Encoding UTF8
+        $reportData = Get-Content -Path $selectedFile.FullName -Encoding UTF8 -Raw | ConvertFrom-Json
         $exportPath = Join-Path $ReportDir "$([System.IO.Path]::GetFileNameWithoutExtension($selectedFile.Name)).txt"
 
         # Redirect output to file

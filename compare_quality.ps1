@@ -11,10 +11,19 @@ $InputDir = ".\input_files"
 $OutputDir = ".\output_files"
 $ReportDir = ".\reports"
 $Timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
-$ReportFile = Join-Path $ReportDir "quality_comparison_$Timestamp.csv"
+$ReportFile = Join-Path $ReportDir "quality_comparison_$Timestamp.json"
 
 # Supported extensions for matching
 $VideoExtensions = @(".mp4", ".mov", ".mkv", ".wmv", ".avi", ".ts", ".m2ts", ".m4v", ".webm", ".flv", ".3gp")
+
+# Performance tuning
+# Auto-detect CPU threads and use 80% (leave 20% for system responsiveness)
+$TotalThreads = [int]$env:NUMBER_OF_PROCESSORS
+$VMAF_Threads = [Math]::Max(1, [Math]::Floor($TotalThreads * 0.8))  # Use 80% of threads, minimum 1
+
+$VMAF_Subsample = 8              # Analyze every Nth frame (1=all frames, 2=every other frame, etc.)
+                                 # Higher values = much faster but less accurate
+                                 # Recommended: 1 for final analysis, 4-8 for quick checks
 
 # Quality thresholds for color-coded output
 $VMAF_Excellent = 95
@@ -173,13 +182,23 @@ function Compare-VideoQuality {
 
     # Note: Running VMAF, SSIM, and PSNR separately as some libvmaf versions don't support combined metrics
     # We'll run VMAF first
+
+    # Build VMAF filter with performance options
+    $vmafOptions = "log_fmt=json:log_path=NUL:n_threads=$VMAF_Threads"
+
+    # Add subsampling for faster analysis (analyze every Nth frame)
+    if ($VMAF_Subsample -gt 1) {
+        $vmafOptions += ":n_subsample=$VMAF_Subsample"
+        Write-Host "  Note: Analyzing every $VMAF_Subsample frame(s) for speed" -ForegroundColor DarkGray
+    }
+
     if ($scalingNeeded) {
         # Scale source to match encoded resolution
-        $filter = "[0:v]scale=$($encodedInfo.Width):$($encodedInfo.Height):flags=bicubic[ref];[ref][1:v]libvmaf=log_fmt=json:log_path=NUL:n_threads=4"
+        $filter = "[0:v]scale=$($encodedInfo.Width):$($encodedInfo.Height):flags=bicubic[ref];[ref][1:v]libvmaf=$vmafOptions"
         Write-Host "  Note: Scaling source video to match encoded resolution" -ForegroundColor DarkGray
     } else {
         # No scaling needed
-        $filter = "[0:v][1:v]libvmaf=log_fmt=json:log_path=NUL:n_threads=4"
+        $filter = "[0:v][1:v]libvmaf=$vmafOptions"
     }
 
     # Run ffmpeg to calculate VMAF
@@ -193,11 +212,50 @@ function Compare-VideoQuality {
 
     try {
         $startTime = Get-Date
-        Write-Host "VMAF..." -NoNewline -ForegroundColor Cyan
+        Write-Host "VMAF: " -NoNewline -ForegroundColor Cyan
 
-        # Run ffmpeg for VMAF and capture stderr output
-        $vmafOutput = & ffmpeg @ffmpegArgs 2>&1 | Out-String
-        Write-Host " Done" -ForegroundColor Green
+        # Calculate total frames for progress tracking
+        $totalFrames = [int]([math]::Ceiling($Duration * $sourceInfo.FPS))
+
+        # Run ffmpeg for VMAF with real-time progress
+        $vmafOutput = ""
+        $process = Start-Process -FilePath "ffmpeg" -ArgumentList $ffmpegArgs -NoNewWindow -PassThru -RedirectStandardError "temp_vmaf_$$.txt"
+
+        # Monitor progress in real-time
+        $lastProgress = -1
+        while (-not $process.HasExited) {
+            Start-Sleep -Milliseconds 500
+
+            if (Test-Path "temp_vmaf_$$.txt") {
+                $output = Get-Content "temp_vmaf_$$.txt" -Tail 5 -ErrorAction SilentlyContinue
+
+                # Parse current frame from ffmpeg output (format: "frame= 1234 fps=...")
+                foreach ($line in $output) {
+                    if ($line -match "frame=\s*(\d+)") {
+                        $currentFrame = [int]$Matches[1]
+                        if ($totalFrames -gt 0) {
+                            $progress = [math]::Min(99, [int](($currentFrame / $totalFrames) * 100))
+
+                            # Only update if progress changed
+                            if ($progress -ne $lastProgress) {
+                                # Clear previous progress and write new
+                                Write-Host "`rVMAF: $progress% " -NoNewline -ForegroundColor Cyan
+                                $lastProgress = $progress
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        # Wait for process to complete
+        $process.WaitForExit()
+
+        # Read full output
+        $vmafOutput = Get-Content "temp_vmaf_$$.txt" -Raw -ErrorAction SilentlyContinue
+        Remove-Item "temp_vmaf_$$.txt" -Force -ErrorAction SilentlyContinue
+
+        Write-Host "`rVMAF: 100% - Done" -ForegroundColor Green
 
         # Parse VMAF score
         $vmaf = $null
@@ -206,7 +264,7 @@ function Compare-VideoQuality {
         }
 
         # Now run SSIM calculation
-        Write-Host "  Progress: SSIM..." -NoNewline -ForegroundColor Cyan
+        Write-Host "  SSIM: " -NoNewline -ForegroundColor Cyan
         $ssimFilter = if ($scalingNeeded) {
             "[0:v]scale=$($encodedInfo.Width):$($encodedInfo.Height):flags=bicubic[ref];[ref][1:v]ssim"
         } else {
@@ -221,7 +279,7 @@ function Compare-VideoQuality {
             "-"
         )
         $ssimOutput = & ffmpeg @ssimArgs 2>&1 | Out-String
-        Write-Host " Done" -ForegroundColor Green
+        Write-Host "Done" -ForegroundColor Green
 
         # Parse SSIM
         $ssim = $null
@@ -230,7 +288,7 @@ function Compare-VideoQuality {
         }
 
         # Now run PSNR calculation
-        Write-Host "  Progress: PSNR..." -NoNewline -ForegroundColor Cyan
+        Write-Host "  PSNR: " -NoNewline -ForegroundColor Cyan
         $psnrFilter = if ($scalingNeeded) {
             "[0:v]scale=$($encodedInfo.Width):$($encodedInfo.Height):flags=bicubic[ref];[ref][1:v]psnr"
         } else {
@@ -245,7 +303,7 @@ function Compare-VideoQuality {
             "-"
         )
         $psnrOutput = & ffmpeg @psnrArgs 2>&1 | Out-String
-        Write-Host " Done" -ForegroundColor Green
+        Write-Host "Done" -ForegroundColor Green
 
         # Parse PSNR
         $psnr = $null
@@ -384,8 +442,19 @@ if ($matchedPairs.Count -eq 0) {
 
 Write-Host "Found $($matchedPairs.Count) matching pair(s) to compare" -ForegroundColor Green
 Write-Host ""
+Write-Host "Performance Settings:" -ForegroundColor Yellow
+Write-Host "  CPU Threads Available: $TotalThreads" -ForegroundColor DarkGray
+Write-Host "  VMAF Threads: $VMAF_Threads (80% of available)" -ForegroundColor White
+Write-Host "  Frame Sampling: " -NoNewline -ForegroundColor White
+if ($VMAF_Subsample -eq 1) {
+    Write-Host "Every frame (full quality, slower)" -ForegroundColor Cyan
+} else {
+    Write-Host "Every $VMAF_Subsample frames (faster, slightly less accurate)" -ForegroundColor Yellow
+}
+Write-Host ""
 Write-Host "Note: Quality analysis takes 1-5x video duration" -ForegroundColor DarkGray
 Write-Host "      Analysis uses CPU only (no GPU acceleration)" -ForegroundColor DarkGray
+Write-Host "      Tip: Set `$VMAF_Subsample=4 in script for 4x faster preview" -ForegroundColor DarkGray
 Write-Host ""
 Write-Host "========================================`n" -ForegroundColor Cyan
 
@@ -492,8 +561,8 @@ foreach ($pair in $matchedPairs) {
 # ============================================================================
 
 if ($reportData.Count -gt 0) {
-    # Export to CSV
-    $reportData | Export-Csv -Path $ReportFile -NoTypeInformation -Encoding UTF8
+    # Export to JSON
+    $reportData | ConvertTo-Json -Depth 10 | Out-File -FilePath $ReportFile -Encoding UTF8
 
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "  SUMMARY" -ForegroundColor Cyan
@@ -539,7 +608,7 @@ if ($reportData.Count -gt 0) {
         Write-Host "  Poor:        $poorCount" -ForegroundColor Red
     }
     Write-Host ""
-    Write-Host "CSV Report: " -NoNewline -ForegroundColor Gray
+    Write-Host "JSON Report: " -NoNewline -ForegroundColor Gray
     Write-Host "$ReportFile" -ForegroundColor White
     Write-Host ""
 }
