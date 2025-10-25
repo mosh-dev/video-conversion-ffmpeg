@@ -328,55 +328,28 @@ foreach ($File in $VideoFiles) {
     # Only auto-rotate when container format is changing (e.g., MP4 → MKV)
     if ($HWAccelMethod -eq "cuda") {
         # NVIDIA NVDEC: Fastest, supports most codecs including VC-1 (WMV)
-        if ($NeedsAutoRotate) {
-            $FFmpegArgs = @(
-                "-hwaccel", "cuda",
-                "-hwaccel_output_format", "cuda",
-                "-autorotate",  # Auto-rotate when container changes (flag, no value)
-                "-i", $InputPath
-            )
-        } else {
-            $FFmpegArgs = @(
-                "-hwaccel", "cuda",
-                "-hwaccel_output_format", "cuda",
-                "-noautorotate",  # Explicitly disable auto-rotation
-                "-i", $InputPath
-            )
-        }
+        $FFmpegArgs = @(
+            "-hwaccel", "cuda",
+            "-hwaccel_output_format", "cuda",
+            "-i", $InputPath
+        )
         $UseCUDA = $true
     } elseif ($HWAccelMethod -eq "d3d11va") {
         # D3D11VA: Windows-native, works on NVIDIA/AMD/Intel GPUs
         Write-Host "  Note: Using D3D11VA hardware decoding" -ForegroundColor DarkGray
         [System.IO.File]::AppendAllText($LogFile, "  Hardware Acceleration: D3D11VA`n", [System.Text.UTF8Encoding]::new($false))
-        if ($NeedsAutoRotate) {
-            $FFmpegArgs = @(
-                "-hwaccel", "d3d11va",
-                "-autorotate",  # Auto-rotate when container changes (flag, no value)
-                "-i", $InputPath
-            )
-        } else {
-            $FFmpegArgs = @(
-                "-hwaccel", "d3d11va",
-                "-noautorotate",  # Explicitly disable auto-rotation
-                "-i", $InputPath
-            )
-        }
+        $FFmpegArgs = @(
+            "-hwaccel", "d3d11va",
+            "-i", $InputPath
+        )
         $UseCUDA = $false
     } else {
         # Software decoding fallback (should rarely be needed)
         Write-Host "  Note: Using software decoding" -ForegroundColor DarkGray
         [System.IO.File]::AppendAllText($LogFile, "  Hardware Acceleration: Software decoding (no HW accel)`n", [System.Text.UTF8Encoding]::new($false))
-        if ($NeedsAutoRotate) {
-            $FFmpegArgs = @(
-                "-autorotate",  # Auto-rotate when container changes (flag, no value)
-                "-i", $InputPath
-            )
-        } else {
-            $FFmpegArgs = @(
-                "-noautorotate",  # Explicitly disable auto-rotation
-                "-i", $InputPath
-            )
-        }
+        $FFmpegArgs = @(
+            "-i", $InputPath
+        )
         $UseCUDA = $false
     }
 
