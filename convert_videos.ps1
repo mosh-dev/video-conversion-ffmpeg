@@ -314,10 +314,10 @@ foreach ($File in $VideoFiles) {
     $NeedsAutoRotate = ($HasRotation -and $ContainerChanging)
 
     if ($HasRotation -and $ContainerChanging) {
-        Write-Host "  Detected rotation: ${Rotation}° + container change - will auto-rotate video" -ForegroundColor Yellow
-        [System.IO.File]::AppendAllText($LogFile, "  Rotation detected: ${Rotation}° + container format changing - applying auto-rotation`n", [System.Text.UTF8Encoding]::new($false))
+        Write-Host "  Detected rotation: ${Rotation}° + container change - !!!" -ForegroundColor Yellow
+        [System.IO.File]::AppendAllText($LogFile, "  Rotation detected: ${Rotation}° + container change - !!!`n", [System.Text.UTF8Encoding]::new($false))
     } elseif ($HasRotation) {
-        Write-Host "  Detected rotation: ${Rotation}° - preserving rotation metadata" -ForegroundColor DarkGray
+        Write-Host "  Detected rotation: ${Rotation}° - preserving as-is (same container)" -ForegroundColor DarkGray
         [System.IO.File]::AppendAllText($LogFile, "  Rotation detected: ${Rotation}° - preserving as-is (same container)`n", [System.Text.UTF8Encoding]::new($false))
     }
 

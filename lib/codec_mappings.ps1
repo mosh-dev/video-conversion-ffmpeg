@@ -44,7 +44,7 @@ $ContainerCodecSupport = @{
         SupportedAudioCodecs = @("aac", "opus", "vorbis", "dts", "flac", "mp3", "pcm_s16le", "pcm_s24le")
         FFmpegFormat = "matroska"
         HardwareAccelMethod = "cuda"
-        FallbackAudioCodec = "opus"  # Better quality at low bitrates
+        FallbackAudioCodec = "aac"  # Better quality at low bitrates
         Description = "Matroska container - Most flexible, supports all modern codecs"
     }
 
