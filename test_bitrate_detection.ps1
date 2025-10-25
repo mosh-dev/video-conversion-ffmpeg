@@ -115,7 +115,7 @@ $InputDir = ".\input_files"
 $VideoFiles = @()
 
 # Common video extensions
-$Extensions = @("*.mp4", "*.mkv", "*.mov", "*.wmv", "*.avi", "*.webm")
+$Extensions = @("*.mp4", "*.mov", "*.mkv", "*.ts", "*.m2ts", "*.m4v")
 
 foreach ($Extension in $Extensions) {
     $VideoFiles += Get-ChildItem -Path $InputDir -Filter $Extension -File -ErrorAction SilentlyContinue
