@@ -14,6 +14,7 @@ The codebase is organized into modular components:
 - **`analyze_quality.ps1`** - Quality validation tool using VMAF/SSIM/PSNR metrics
 - **`view_reports.ps1`** - Interactive report viewer for browsing and displaying JSON quality reports
 - **`lib/config.ps1`** - Centralized configuration file with all user-modifiable parameters
+- **`lib/codec_mappings.ps1`** - Container/codec compatibility mappings and validation functions
 - **`lib/conversion_helpers.ps1`** - Helper functions for metadata detection, parameter selection, and bitrate calculation
 - **`lib/show_conversion_ui.ps1`** - Modern Windows 11-style GUI for interactive parameter selection
 
@@ -21,19 +22,28 @@ This modular separation allows users to modify settings in `config.ps1` without 
 
 ### Key Design Patterns
 
-1. **Hardware Acceleration Fallback**: Three-tier acceleration strategy for maximum compatibility:
+1. **Codec/Container Compatibility Mapping** (NEW): Centralized configuration for all codec/container rules:
+   - All compatibility rules defined in `lib/codec_mappings.ps1`
+   - Simple approach: Only define `SupportedVideoCodecs` and `SupportedAudioCodecs` - anything else is incompatible
+   - Helper functions: `Test-CodecContainerCompatibility`, `Test-AudioContainerCompatibility`, `Get-SkipReason`
+   - Automatic validation on startup to catch configuration errors
+   - Easy to extend: just add entries to `$ContainerCodecSupport` hashtable
+   - Self-documenting: each container includes description and default audio codec
+   - Benefits: Single source of truth, DRY principle, reduced hardcoded logic, easier maintenance
+
+2. **Hardware Acceleration Fallback**: Three-tier acceleration strategy for maximum compatibility:
    - **CUDA (NVDEC)**: Primary method for H.264, HEVC, VP8, VP9, AV1, MPEG-1/2/4, VC-1, MJPEG
    - **D3D11VA**: Windows-native fallback for FLV, 3GP, DIVX, or when CUDA fails
    - **Software Decoding**: Final fallback for universal compatibility
    - Automatically selects best available method per video format
 
-2. **Dynamic Parameter Selection**: Two-stage matching algorithm for encoding parameters:
+3. **Dynamic Parameter Selection**: Two-stage matching algorithm for encoding parameters:
    - Stage 1: Match video width to highest applicable `ResolutionMin` tier
    - Stage 2: Within that tier, find the best FPS range match (exact or closest)
    - Applies `$BitrateModifier` to all bitrate values for fine-tuning
    - Implemented in `Get-DynamicParameters` function in `conversion_helpers.ps1`
 
-3. **Audio Compatibility Handling**: Intelligent audio codec detection and re-encoding:
+4. **Audio Compatibility Handling**: Intelligent audio codec detection and re-encoding:
    - Uses ffprobe to detect actual audio codec (not file extension guessing)
    - Automatically re-encodes incompatible codecs even when "Copy original audio" is selected
    - Detects WMA (wmav1, wmav2, wmapro, wmalossless), Vorbis, DTS, PCM variants
@@ -42,7 +52,7 @@ This modular separation allows users to modify settings in `config.ps1` without 
    - Prevents "silent video" issues in browsers and mobile devices
    - Implemented in lines 216-265 of `convert_videos.ps1`
 
-4. **Container/Codec Compatibility Validation**: Prevents incompatible codec/container combinations:
+5. **Container/Codec Compatibility Validation**: Prevents incompatible codec/container combinations:
    - Validates codec support when "Preserve original container" is enabled
    - Automatically skips files with incompatible combinations with clear error messages
    - Container restrictions:
@@ -56,19 +66,19 @@ This modular separation allows users to modify settings in `config.ps1` without 
      - OGV: blocks HEVC
    - Implemented in lines 159-184 of `convert_videos.ps1`
 
-5. **Filename Collision Detection**: Prevents overwriting when converting container formats:
+6. **Filename Collision Detection**: Prevents overwriting when converting container formats:
    - Detects when multiple source files with different extensions would produce same output name
    - Example: `video.ts` and `video.m2ts` both converting to `video.mp4`
    - Automatically renames with original extension: `video_ts.mp4`, `video_m2ts.mp4`
 
-6. **File Path Handling**: Robust handling of special characters:
+7. **File Path Handling**: Robust handling of special characters:
    - Uses `-LiteralPath` with `Test-Path` to avoid wildcard interpretation of `[]` brackets
    - Uses `Join-Path` for cross-platform path construction
    - Uses UTF-8 encoding without BOM for all file operations
 
-7. **Codec Abstraction**: User-friendly codec selection (`AV1`, `HEVC`) maps to ffmpeg codec names (`av1_nvenc`, `hevc_nvenc`) via `$CodecMap` hashtable
+8. **Codec Abstraction**: User-friendly codec selection (`AV1`, `HEVC`) maps to ffmpeg codec names (`av1_nvenc`, `hevc_nvenc`) via `$CodecMap` hashtable
 
-8. **MKV Stream Mapping**: Special handling for MKV files with complex streams:
+9. **MKV Stream Mapping**: Special handling for MKV files with complex streams:
    - Maps all streams (`-map 0`) to preserve video, audio, subtitles, and metadata
    - Adds `-fflags +genpts` to generate presentation timestamps
    - Uses `-ignore_unknown` to skip unsupported stream types
@@ -287,11 +297,13 @@ When editing `convert_videos.ps1` or helper files:
    - See lines 216-265 in `convert_videos.ps1` for implementation
 
 6. **Container/Codec Validation**: Prevents ffmpeg errors from incompatible combinations:
-   - Checks codec support before starting conversion (lines 159-184)
-   - Only validates when `$PreserveContainer = $true`
-   - Uses hashtable `$UnsupportedCombinations` to define restrictions
-   - Displays clear skip message with reason (e.g., "AV1 codec not supported by MOV container")
+   - All codec/container rules defined in `lib/codec_mappings.ps1`
+   - Automatic validation on script startup using `Test-CodecMappingsValid`
+   - Uses `Test-CodecContainerCompatibility` to check video codec support
+   - Uses `Test-AudioContainerCompatibility` to check audio codec support
+   - Displays clear skip messages with detailed reasons via `Get-SkipReason`
    - Logs skipped files to conversion log
+   - Easy to extend: just add entries to `$ContainerCodecSupport` hashtable
 
 7. **GUI Container/Audio Interaction**: Dynamic UI state management:
    - When "Preserve original container" is selected, audio dropdown is forced to "Copy original audio"
@@ -331,8 +343,21 @@ The script handles a wide variety of video formats through the `$FileExtensions`
 
 **Adding New Formats:**
 1. Add pattern to `$FileExtensions` array in `lib/config.ps1` (e.g., `"*.mpg"`)
-2. If CUDA fails, add extension to D3D11VA list in `convert_videos.ps1` (lines 380-384)
-3. Test with sample file to verify hardware acceleration works
+2. Add format definition to `$ContainerCodecSupport` in `lib/codec_mappings.ps1`:
+   ```powershell
+   ".mpg" = @{
+       SupportedVideoCodecs = @("mpeg2", "mpeg1")  # Only list what IS supported
+       SupportedAudioCodecs = @("mp2", "mp3")      # Anything not listed is incompatible
+       FFmpegFormat = "mpeg"
+       HardwareAccelMethod = "cuda"
+       DefaultAudioCodec = "mp2"
+       Description = "MPEG program stream - Legacy format"
+   }
+   ```
+3. Run script to validate mappings - startup validation will catch errors
+4. Test with sample file to verify hardware acceleration and codec compatibility
+
+**Note**: Only define SupportedVideoCodecs and SupportedAudioCodecs - anything not in these lists is automatically incompatible. This keeps the configuration simple and DRY (Don't Repeat Yourself).
 
 ## Script Behavior Notes
 
@@ -358,6 +383,7 @@ VideoConversion/
 ├── reports/              # Quality validation reports (JSON)
 ├── lib/
 │   ├── config.ps1        # User configuration
+│   ├── codec_mappings.ps1         # Codec/container compatibility mappings
 │   ├── conversion_helpers.ps1   # Helper functions
 │   └── show_conversion_ui.ps1   # GUI interface
 ├── convert_videos.ps1    # Main conversion script

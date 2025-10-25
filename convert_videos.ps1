@@ -9,6 +9,9 @@
 # Load configuration
 . .\lib\config.ps1
 
+# Load codec mappings
+. .\lib\codec_mappings.ps1
+
 # Load helper functions
 . .\lib\conversion_helpers.ps1
 
@@ -48,6 +51,15 @@ $DefaultVideoCodec = $CodecMap[$OutputCodec]
 $PreserveContainer = $uiResult.PreserveContainer
 $PreserveAudio = $uiResult.PreserveAudio
 $BitrateMultiplier = $uiResult.BitrateMultiplier
+
+# Validate codec mappings
+if (-not (Test-CodecMappingsValid)) {
+    Write-Host "`nERROR: Invalid codec mappings detected. Please check lib/codec_mappings.ps1" -ForegroundColor Red
+    Write-Host "Press any key to exit..." -ForegroundColor Yellow
+    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    exit 1
+}
+Write-Host ""
 
 # Generate timestamped log filename
 $Timestamp = $StartTime.ToString("yyyy-MM-dd_HH-mm-ss")
@@ -158,31 +170,13 @@ foreach ($File in $VideoFiles) {
 
     # Check codec compatibility with container format (when preserving container)
     if ($PreserveContainer) {
-        $ContainerExt = $FileExtension.ToLower()
-        $OutputCodecLower = $OutputCodec.ToLower()
-
-        # Define codec support for each container
-        $UnsupportedCombinations = @{
-            ".avi" = @("av1")  # AVI doesn't support AV1
-            ".mov" = @("av1")  # MOV doesn't support AV1 (only MP4 and AVIF support AV1)
-            ".m4v" = @("av1")  # M4V doesn't support AV1 (only MP4 and AVIF support AV1)
-            ".webm" = @("hevc")  # WebM only supports VP8, VP9, or AV1 (not HEVC)
-            ".flv" = @("av1", "hevc")  # FLV doesn't support AV1 or HEVC
-            ".3gp" = @("av1")  # 3GP doesn't support AV1
-            ".wmv" = @("av1", "hevc")  # WMV container only supports VC-1/WMV codecs
-            ".asf" = @("av1", "hevc")  # ASF container only supports VC-1/WMV codecs
-            ".vob" = @("av1", "hevc")  # VOB only supports MPEG-2
-            ".ogv" = @("hevc")  # OGV (Ogg) doesn't support HEVC (only Theora, VP8, VP9, AV1)
-        }
-
-        if ($UnsupportedCombinations.ContainsKey($ContainerExt)) {
-            if ($UnsupportedCombinations[$ContainerExt] -contains $OutputCodecLower) {
-                Write-Host "[$CurrentFile/$($VideoFiles.Count)] Skipped: $($File.Name)" -ForegroundColor Yellow
-                Write-Host "  Reason: $($OutputCodec.ToUpper()) codec not supported by $($ContainerExt.ToUpper()) container" -ForegroundColor Red
-                [System.IO.File]::AppendAllText($LogFile, "Skipped: $($File.Name) ($($OutputCodec.ToUpper()) codec not supported by $($ContainerExt.ToUpper()) container)`n", [System.Text.UTF8Encoding]::new($false))
-                $SkipCount++
-                continue
-            }
+        if (-not (Test-CodecContainerCompatibility -Container $FileExtension -Codec $OutputCodec)) {
+            $reason = Get-SkipReason -Container $FileExtension -Codec $OutputCodec
+            Write-Host "[$CurrentFile/$($VideoFiles.Count)] Skipped: $($File.Name)" -ForegroundColor Yellow
+            Write-Host "  Reason: $reason" -ForegroundColor Red
+            [System.IO.File]::AppendAllText($LogFile, "Skipped: $($File.Name) - $reason`n", [System.Text.UTF8Encoding]::new($false))
+            $SkipCount++
+            continue
         }
     }
 
@@ -248,10 +242,7 @@ foreach ($File in $VideoFiles) {
         $AudioCodecToUse = "copy"
         $AudioBitrate = $null
 
-        # Check for incompatible audio codec/container combinations
-        # MP4/M4V/MOV containers don't support: WMA, WMAPro, Vorbis, DTS, PCM variants, etc.
-        # MKV containers don't support: WMA (Windows Media Audio)
-        # Detect actual audio codec from source file
+        # Detect actual audio codec from source file using ffprobe
         try {
             $AudioCodecRaw = & ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of csv=p=0 $InputPath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
             $SourceAudioCodec = if ($AudioCodecRaw) { $AudioCodecRaw.Trim().ToLower() } else { $null }
@@ -259,27 +250,20 @@ foreach ($File in $VideoFiles) {
             $SourceAudioCodec = $null
         }
 
-        # Define incompatible audio codecs for each container type
-        $IncompatibleForMP4 = @("wmav1", "wmav2", "wmapro", "wmalossless", "vorbis", "dts", "dca", "pcm_s16le", "pcm_s24le", "pcm_s32le")
-        $IncompatibleForMKV = @("wmav1", "wmav2", "wmapro", "wmalossless")
-
+        # Check audio/container compatibility using mapping
         $NeedsReencoding = $false
-        if ($FileExtension.ToLower() -match "\.(mp4|m4v|mov)$") {
-            # Check if source audio codec is incompatible with MP4/M4V/MOV
-            if ($SourceAudioCodec -and ($IncompatibleForMP4 -contains $SourceAudioCodec)) {
+        if ($SourceAudioCodec) {
+            if (-not (Test-AudioContainerCompatibility -Container $FileExtension -AudioCodec $SourceAudioCodec)) {
                 Write-Host "  Note: Re-encoding audio ($($SourceAudioCodec.ToUpper()) codec not compatible with $($FileExtension.ToUpper()) container)" -ForegroundColor Yellow
-                $NeedsReencoding = $true
-            }
-        } elseif ($FileExtension.ToLower() -eq ".mkv") {
-            # Check if source audio codec is incompatible with MKV
-            if ($SourceAudioCodec -and ($IncompatibleForMKV -contains $SourceAudioCodec)) {
-                Write-Host "  Note: Re-encoding audio ($($SourceAudioCodec.ToUpper()) codec not compatible with MKV container)" -ForegroundColor Yellow
                 $NeedsReencoding = $true
             }
         }
 
         if ($NeedsReencoding) {
-            $AudioCodecToUse = $AudioCodecMap[$AudioCodec.ToLower()]
+            # Use container-specific fallback audio codec
+            $FallbackAudioCodec = Get-FallbackAudioCodec -Container $FileExtension
+            $AudioCodecToUse = $AudioCodecMap[$FallbackAudioCodec]
+
             if (-not $AudioCodecToUse) {
                 $AudioCodecToUse = "aac"  # AAC is universally compatible
             }
@@ -289,7 +273,7 @@ foreach ($File in $VideoFiles) {
         $AudioCodecToUse = $AudioCodecMap[$AudioCodec.ToLower()]
         if (-not $AudioCodecToUse) {
             Write-Host "  Warning: Invalid audio codec '$AudioCodec'. Using 'aac' as fallback." -ForegroundColor Yellow
-            $AudioCodecToUse = "aac"  # Changed from libopus to aac for better compatibility
+            $AudioCodecToUse = "aac"  # AAC for maximum compatibility
         }
         $AudioBitrate = $DefaultAudioBitrate
     }
@@ -299,14 +283,8 @@ foreach ($File in $VideoFiles) {
     # NVDEC supports: H.264, HEVC, VP8, VP9, AV1, MPEG-1/2/4, VC-1 (WMV), MJPEG
     # D3D11VA supports: H.264, HEVC, VP9, VC-1, MPEG-2 (Windows-native, works on all GPUs)
 
-    $HWAccelMethod = "cuda"  # Default to CUDA (NVDEC)
-    $SourceExtension = $File.Extension.ToLower()
-
-    # For problematic formats, try D3D11VA instead of CUDA
-    # (mainly for very old codecs or corrupted files that NVDEC might reject)
-    if ($SourceExtension -match "\.(flv|3gp|divx)$") {
-        $HWAccelMethod = "d3d11va"
-    }
+    # Get hardware acceleration method from mapping
+    $HWAccelMethod = Get-HardwareAccelMethod -FileExtension $File.Extension
 
     # Build input arguments with hardware acceleration
     if ($HWAccelMethod -eq "cuda") {
@@ -411,19 +389,8 @@ foreach ($File in $VideoFiles) {
     # Always allow overwrite for temp files (we'll handle final file existence separately)
     $FFmpegArgs = @("-y") + $FFmpegArgs
 
-    # Determine output format based on file extension (needed because of .tmp extension)
-    $OutputFormat = switch ($FileExtension.ToLower()) {
-        ".mkv" { "matroska" }
-        ".mp4" { "mp4" }
-        ".m4v" { "mp4" }
-        ".webm" { "webm" }
-        ".mov" { "mov" }
-        ".ts" { "mpegts" }
-        ".m2ts" { "mpegts" }
-        ".wmv" { "asf" }
-        ".avi" { "avi" }
-        default { "mp4" }  # Default to MP4 for better compatibility
-    }
+    # Get FFmpeg format from mapping
+    $OutputFormat = Get-FFmpegFormat -Container $FileExtension
 
     # Add output format and temporary output path
     $FFmpegArgs += @("-f", $OutputFormat, $TempOutputPath)
