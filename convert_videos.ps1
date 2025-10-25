@@ -156,6 +156,36 @@ foreach ($File in $VideoFiles) {
         continue
     }
 
+    # Check codec compatibility with container format (when preserving container)
+    if ($PreserveContainer) {
+        $ContainerExt = $FileExtension.ToLower()
+        $OutputCodecLower = $OutputCodec.ToLower()
+
+        # Define codec support for each container
+        $UnsupportedCombinations = @{
+            ".avi" = @("av1")  # AVI doesn't support AV1
+            ".mov" = @("av1")  # MOV doesn't support AV1 (only MP4 and AVIF support AV1)
+            ".m4v" = @("av1")  # M4V doesn't support AV1 (only MP4 and AVIF support AV1)
+            ".webm" = @("hevc")  # WebM only supports VP8, VP9, or AV1 (not HEVC)
+            ".flv" = @("av1", "hevc")  # FLV doesn't support AV1 or HEVC
+            ".3gp" = @("av1")  # 3GP doesn't support AV1
+            ".wmv" = @("av1", "hevc")  # WMV container only supports VC-1/WMV codecs
+            ".asf" = @("av1", "hevc")  # ASF container only supports VC-1/WMV codecs
+            ".vob" = @("av1", "hevc")  # VOB only supports MPEG-2
+            ".ogv" = @("hevc")  # OGV (Ogg) doesn't support HEVC (only Theora, VP8, VP9, AV1)
+        }
+
+        if ($UnsupportedCombinations.ContainsKey($ContainerExt)) {
+            if ($UnsupportedCombinations[$ContainerExt] -contains $OutputCodecLower) {
+                Write-Host "[$CurrentFile/$($VideoFiles.Count)] Skipped: $($File.Name)" -ForegroundColor Yellow
+                Write-Host "  Reason: $($OutputCodec.ToUpper()) codec not supported by $($ContainerExt.ToUpper()) container" -ForegroundColor Red
+                [System.IO.File]::AppendAllText($LogFile, "Skipped: $($File.Name) ($($OutputCodec.ToUpper()) codec not supported by $($ContainerExt.ToUpper()) container)`n", [System.Text.UTF8Encoding]::new($false))
+                $SkipCount++
+                continue
+            }
+        }
+    }
+
     # Determine parameters to use
     $VideoBitrate = $DefaultVideoBitrate
     $MaxRate = $DefaultMaxRate
