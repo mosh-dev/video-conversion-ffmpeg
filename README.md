@@ -5,14 +5,18 @@ A powerful batch video conversion tool with GPU acceleration, featuring an inter
 ## Features
 
 - **GPU-Accelerated Encoding**: Leverage NVIDIA NVENC for fast AV1 and HEVC encoding
+- **Hardware Acceleration Fallback**: Automatic fallback chain (CUDA → D3D11VA → Software) for maximum compatibility
+- **Wide Format Support**: Handles MP4, MOV, MKV, WMV, AVI, TS, M2TS, M4V, FLV, 3GP, and more
 - **Interactive GUI Launcher**: Configure all settings through an intuitive interface
 - **Smart Parameter Selection**: Automatically adjusts encoding parameters based on resolution and framerate
 - **Bitrate Control**: Fine-tune output quality with an adjustable bitrate slider (0.1x to 3.0x)
 - **Intelligent Bitrate Limiting**: Never exceeds source video bitrate to avoid quality loss
+- **Audio Compatibility Handling**: Automatically re-encodes incompatible audio codecs for target containers
 - **Batch Processing**: Convert multiple videos with a single command
 - **Comprehensive Logging**: Timestamped logs with detailed conversion statistics
 - **Resume Support**: Automatically skips already-converted files
 - **Crash Recovery**: Cleans up incomplete conversions from previous runs
+- **Collision Detection**: Prevents filename conflicts when converting between container formats
 
 ## Requirements
 
@@ -73,7 +77,7 @@ Edit `config.ps1` to customize:
 ```powershell
 # Processing Options
 $SkipExistingFiles = $true        # Skip already-converted files
-$FileExtensions = @("*.mp4", "*.mov", "*.mkv", "*.wmv", "*.ts", "*.m2ts", "*.m4v")
+$FileExtensions = @("*.mp4", "*.mov", "*.mkv", "*.wmv", "*.avi", "*.ts", "*.m2ts", "*.m4v", "*.flv", "*.3gp", "*.divx", "*.webm")
 
 # Default Codec (can be changed in GUI)
 $OutputCodec = "AV1"               # "AV1" or "HEVC"
@@ -83,9 +87,9 @@ $AudioCodec = "aac"                # "opus" or "aac"
 $DefaultAudioBitrate = "256k"
 
 # Output Settings
-$OutputExtension = ".mp4"          # .mkv, .mp4, .webm
+$OutputExtension = ".mp4"          # .mkv, .mp4, .webm, .mov, .ts, .wmv, .avi
 $PreserveContainer = $false        # Override in GUI
-$PreserveAudio = $false            # Override in GUI
+$PreserveAudio = $false            # Override in GUI (auto re-encodes incompatible audio)
 
 # Dynamic Parameters
 $UseDynamicParameters = $true      # Enable resolution/FPS-based encoding
@@ -220,9 +224,13 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 **Problem**: Video plays but no audio in some players
 
 **Solution**:
-1. In GUI, select **Re-encode to AAC**
-2. This ensures maximum compatibility with all players
-3. Avoid copying DTS audio if targeting universal playback
+1. The script **automatically detects** incompatible audio/container combinations
+2. When converting WMV/AVI/MKV to MP4/MOV, audio is automatically re-encoded if needed
+3. For manual control, select **Re-encode to AAC** in GUI
+4. AAC is universally compatible with MP4/MOV/M4V containers
+5. Opus is best for MKV/WebM containers
+
+**Note**: The script automatically re-encodes WMAPro, Vorbis, DTS, and PCM audio when the target container doesn't support them.
 
 ### Large File Sizes
 **Problem**: Output files are larger than expected
@@ -257,30 +265,65 @@ ffprobe -v error -select_streams v:0 -show_entries stream=width,height,r_frame_r
 ## Supported Formats
 
 ### Input Formats
-- MP4 (.mp4)
-- MOV (.mov)
-- MKV (.mkv)
-- WMV (.wmv)
-- TS (.ts)
-- M2TS (.m2ts)
-- M4V (.m4v)
+The script supports a wide range of video formats:
+- **MP4** (.mp4) - MPEG-4 container
+- **MOV** (.mov) - QuickTime format
+- **MKV** (.mkv) - Matroska container (special stream mapping for subtitles/attachments)
+- **WMV** (.wmv) - Windows Media Video
+- **AVI** (.avi) - Audio Video Interleave
+- **TS/M2TS** (.ts, .m2ts) - MPEG Transport Stream
+- **M4V** (.m4v) - iTunes video format
+- **FLV** (.flv) - Flash Video
+- **3GP** (.3gp) - 3GPP mobile format
+- **DIVX** (.divx) - DivX format
+- **WebM** (.webm) - VP8/VP9 web format
+
+Add more formats by editing `$FileExtensions` in `config.ps1`.
 
 ### Output Formats
-- MP4 (.mp4) - Recommended for compatibility
-- MKV (.mkv) - Supports all codecs and features
-- WebM (.webm) - Web-optimized
-- MOV (.mov) - QuickTime format
+- **MP4** (.mp4) - Recommended for compatibility
+- **MKV** (.mkv) - Supports all codecs and features
+- **WebM** (.webm) - Web-optimized
+- **MOV** (.mov) - QuickTime format
+- **TS/M2TS** (.ts, .m2ts) - Transport streams
+- **WMV** (.wmv) - Windows Media format
+- **AVI** (.avi) - Legacy format
+
+### Hardware Acceleration
+
+The script uses intelligent hardware acceleration with automatic fallback:
+
+1. **CUDA (NVDEC)** - Primary method (fastest)
+   - Supports: H.264, HEVC, VP8, VP9, AV1, MPEG-1/2/4, VC-1 (WMV), MJPEG
+   - Requires: NVIDIA GPU with NVDEC support
+
+2. **D3D11VA** - Fallback for problematic formats
+   - Supports: H.264, HEVC, VP9, VC-1, MPEG-2
+   - Works on: NVIDIA, AMD, Intel GPUs (Windows-native)
+   - Used automatically for: FLV, 3GP, DIVX, or when CUDA fails
+
+3. **Software Decoding** - Final fallback
+   - Universal compatibility for all codecs
+   - Used when hardware acceleration is unavailable or fails
 
 ### Supported Codecs
 
-**Video**:
-- AV1 (via av1_nvenc)
-- HEVC/H.265 (via hevc_nvenc)
+**Video Output**:
+- **AV1** (via av1_nvenc) - Best compression, requires RTX 40+
+- **HEVC/H.265** (via hevc_nvenc) - Excellent compression, GTX 10+
 
-**Audio**:
-- AAC (maximum compatibility)
-- Opus (better quality at low bitrates)
-- Copy (preserve original, fastest)
+**Video Input** (decoded via hardware acceleration):
+- H.264, HEVC, VP8, VP9, AV1, MPEG-1/2/4, VC-1, MJPEG, and more
+
+**Audio Output**:
+- **AAC** - Maximum compatibility (MP4, MOV, M4V)
+- **Opus** - Better quality at low bitrates (MKV, WebM)
+- **Copy** - Preserve original (fastest, but may have compatibility issues)
+
+**Audio Compatibility**:
+- The script automatically re-encodes incompatible audio when needed
+- Example: WMAPro audio → AAC when converting WMV to MP4
+- Prevents "silent video" issues in web browsers and mobile devices
 
 ## FAQ
 
@@ -303,7 +346,7 @@ A: The script automatically limits encoding bitrate to not exceed source bitrate
 
 **Q: Can I pause and resume conversions?**
 
-A: Yes! Press Ctrl+C to stop, then run the script again. If `$SkipExistingFiles = $true`, it will skip completed files and resume where it left off.
+A: Yes! Press Ctrl+C to stop the script immediately. Then run it again - if `$SkipExistingFiles = $true`, it will skip completed files and resume where it left off. Incomplete .tmp files are automatically cleaned up on restart.
 
 **Q: What's the difference between "Copy original audio" and re-encoding?**
 
