@@ -22,7 +22,7 @@ $TotalThreads = [int]$env:NUMBER_OF_PROCESSORS
 $VMAF_Threads = [Math]::Max(1, [Math]::Floor($TotalThreads * 1))  # Use 80% of threads, minimum 1
 # $VMAF_Threads = 20
 
-$VMAF_Subsample = 8              # Analyze every Nth frame (1=all frames, 2=every other frame, etc.)
+$VMAF_Subsample = 30              # Analyze every Nth frame (1=all frames, 2=every other frame, etc.)
                                  # Higher values = much faster but less accurate
                                  # Recommended: 1 for final analysis, 4-8 for quick checks
 
