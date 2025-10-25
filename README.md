@@ -63,6 +63,38 @@ When you run the script, a GUI window appears with the following options:
   - Incompatible codec/container combinations are automatically skipped (e.g., AV1 in MOV, HEVC in WebM)
 - **Convert all to [format]**: Converts all videos to the specified format
 
+##### Container/Codec Compatibility Matrix
+
+**When "Preserve Original Container" is enabled:**
+
+| Input Format | HEVC Encoding | AV1 Encoding |
+|--------------|---------------|--------------|
+| MP4 | ✅ Works | ✅ Works |
+| MKV | ✅ Works | ✅ Works |
+| MOV | ✅ Works | ❌ Skipped (incompatible) |
+| TS | ✅ Works | ❌ Skipped (incompatible) |
+| M2TS | ✅ Works | ❌ Skipped (incompatible) |
+| M4V | ✅ Works | ❌ Skipped (incompatible) |
+| AVI | ✅ Works | ❌ Skipped (incompatible) |
+| WebM | ❌ Skipped (incompatible) | ✅ Works |
+| WMV | ❌ Skipped (incompatible) | ❌ Skipped (incompatible) |
+
+**Summary:**
+- **HEVC**: Works with 7 formats (MP4, MOV, MKV, TS, M2TS, M4V, AVI)
+- **AV1**: Works with 3 formats (MP4, MKV, WebM)
+
+**When converting to MP4 output format:**
+
+| Codec Choice | Result |
+|--------------|--------|
+| HEVC | ✅ **All input formats convert to MP4 with HEVC** |
+| AV1 | ✅ **All input formats convert to MP4 with AV1** |
+
+**Recommendation:**
+- Use **"Preserve original container"** with **HEVC** for maximum compatibility
+- Use **"Convert to MP4"** with **either codec** for universal compatibility
+- MP4 and MKV are the most flexible containers supporting both HEVC and AV1
+
 #### Audio Encoding
 - **Copy original audio**: Fastest, preserves original quality
   - Automatically disabled when preserving original container
