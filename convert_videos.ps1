@@ -213,16 +213,12 @@ foreach ($File in $VideoFiles) {
         "-i", $InputPath
     )
 
-    # For MKV files, add specific stream mapping to avoid subtitle/attachment issues
+    # For MKV files, add specific stream mapping
     if ($File.Extension -match "^\.(mkv|MKV)$") {
         $FFmpegArgs += @(
-            "-map", "0:v:0",      # Map only first video stream
-            "-map", "0:a:0",      # Map only first audio stream
-            "-sn",                # No subtitles
-            "-dn",                # Ignore data streams
-            "-map_metadata", "-1", # Strip all metadata that might cause issues
+            "-map", "0",           # Map all streams (video, audio, subtitles, data, metadata)
             "-fflags", "+genpts",  # Generate presentation timestamps
-            "-ignore_unknown"     # Ignore unknown streams
+            "-ignore_unknown"      # Ignore unknown streams
         )
     }
 
