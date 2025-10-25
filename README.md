@@ -17,6 +17,7 @@ A powerful batch video conversion tool with GPU acceleration, featuring an inter
 - **Resume Support**: Automatically skips already-converted files
 - **Crash Recovery**: Cleans up incomplete conversions from previous runs
 - **Collision Detection**: Prevents filename conflicts when converting between container formats
+- **Quality Comparison Tool**: Validate re-encoded video quality using VMAF, SSIM, and PSNR metrics
 
 ## Requirements
 
@@ -121,9 +122,15 @@ VideoConversion/
 ├── input_files/          # Place source videos here
 ├── output_files/         # Converted videos appear here
 ├── logs/                 # Timestamped conversion logs
-├── config.ps1           # Configuration file
-├── convert_videos.ps1   # Main conversion script
-└── README.md            # This file
+├── reports/              # Quality comparison reports (CSV)
+├── lib/
+│   ├── config.ps1        # Configuration file
+│   ├── conversion_helpers.ps1   # Helper functions
+│   └── show_conversion_ui.ps1   # GUI interface
+├── convert_videos.ps1    # Main conversion script
+├── compare_quality.ps1   # Quality comparison tool
+├── view_reports.ps1      # Quality report viewer
+└── README.md             # This file
 ```
 
 ## Usage Examples
@@ -149,6 +156,20 @@ VideoConversion/
 4. Set bitrate multiplier to **0.8x**
 5. Choose **Copy original audio**
 6. Click Start
+
+### Example 4: Quality Comparison
+After converting videos, verify the quality:
+1. Run `.\compare_quality.ps1`
+2. Script automatically matches source and encoded files
+3. VMAF/SSIM/PSNR metrics are calculated for each pair
+4. View results in console and CSV report in `reports/`
+
+### Example 5: View Quality Reports
+Browse and view saved quality reports:
+1. Run `.\view_reports.ps1`
+2. Select a report from the list (sorted by newest first)
+3. View formatted quality metrics and summary
+4. Option to export report to text file
 
 ## Output Example
 
@@ -192,6 +213,185 @@ Each conversion run creates a timestamped log file in `logs/`:
   - Applied encoding profiles
   - Conversion statistics
   - Error messages (if any)
+
+## Quality Comparison
+
+The `compare_quality.ps1` script validates the visual quality of your re-encoded videos using industry-standard metrics.
+
+### How to Use
+
+```powershell
+.\compare_quality.ps1
+```
+
+The script will:
+1. Scan `input_files/` and `output_files/` directories
+2. Match source videos with their re-encoded versions (handles container changes)
+3. Calculate quality metrics using ffmpeg's libvmaf filter
+4. Generate console output with color-coded results
+5. Save detailed CSV report to `reports/quality_comparison_YYYY-MM-DD_HH-MM-SS.csv`
+
+### Quality Metrics Explained
+
+**VMAF (Video Multimethod Assessment Fusion)**
+- Scale: 0-100 (higher is better)
+- Netflix's perceptual quality metric
+- **95+**: Excellent (visually lossless)
+- **90-95**: Very good (minimal artifacts)
+- **85-90**: Acceptable quality
+- **<85**: Poor quality (consider higher bitrate)
+
+**SSIM (Structural Similarity Index)**
+- Scale: 0-1.00 (higher is better)
+- Measures structural similarity between videos
+- **0.98+**: Excellent
+- **0.95-0.98**: Very good
+- **0.90-0.95**: Acceptable
+- **<0.90**: Poor
+
+**PSNR (Peak Signal-to-Noise Ratio)**
+- Scale: dB (higher is better)
+- Simple quality metric
+- **40+ dB**: Excellent
+- **35-40 dB**: Very good
+- **30-35 dB**: Acceptable
+- **<30 dB**: Poor
+
+### Sample Output
+
+```
+========================================
+  VIDEO QUALITY COMPARISON
+========================================
+
+Found 3 source video(s) in .\input_files
+Found 3 encoded video(s) in .\output_files
+Found 3 matching pair(s) to compare
+
+========================================
+
+[1/3] Comparing: vacation_2024
+  Source:  vacation_2024.mov (850.5 MB)
+  Encoded: vacation_2024.mp4 (425.3 MB)
+  Compression: 2.0x (50.0% saved)
+  Resolution: 3840x2160 -> 3840x2160
+  Bitrate: 38.4 Mbps -> 19.2 Mbps
+  Analyzing quality (this may take a while)...
+  Quality Metrics:
+    VMAF: 96.5 / 100
+    SSIM: 0.9875 / 1.00
+    PSNR: 43.2 dB
+  Assessment: Excellent quality (visually lossless)
+
+========================================
+  COMPARISON SUMMARY
+========================================
+Total Comparisons:    3
+Average VMAF Score:   95.8 / 100
+Average SSIM Score:   0.9841 / 1.00
+Average PSNR:         42.1 dB
+Average Compression:  2.1x (52.3% saved)
+
+Quality Distribution:
+  Excellent:   2
+  Very Good:   1
+  Acceptable:  0
+  Poor:        0
+
+Report saved to: reports\quality_comparison_2025-01-15_16-30-45.csv
+```
+
+### Requirements
+
+**ffmpeg with libvmaf support** is required. Most standard ffmpeg builds don't include this.
+
+**To get ffmpeg with libvmaf:**
+1. Download from [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds/releases)
+2. Choose a **GPL** build (includes libvmaf)
+3. Replace your existing ffmpeg.exe
+
+**To check if you have libvmaf:**
+```powershell
+ffmpeg -filters 2>&1 | Select-String libvmaf
+```
+
+### Performance Notes
+
+- Quality comparison is **much slower** than conversion (typically 1-5x video duration)
+- The script analyzes every frame of both videos
+- Expect ~5-10 minutes per comparison for a 1080p 60fps video
+- Uses 4 threads by default for faster processing
+- No GPU acceleration available for quality metrics
+
+### CSV Report Format
+
+The CSV report includes:
+- File names and sizes
+- Compression ratio and space saved
+- Source and encoded resolution/bitrate
+- VMAF, SSIM, PSNR scores
+- Quality assessment (Excellent/Very Good/Acceptable/Poor)
+
+Import into Excel or Google Sheets for further analysis.
+
+## Viewing Quality Reports
+
+The `view_reports.ps1` script provides an interactive way to browse and view saved quality comparison reports.
+
+### How to Use
+
+```powershell
+.\view_reports.ps1
+```
+
+### Features
+
+- **Browse Reports**: Lists all CSV reports sorted by creation date (newest first)
+- **Formatted Display**: Shows quality metrics with color-coded results
+- **Summary Statistics**: Displays averages and quality distribution
+- **Export to Text**: Save formatted report as plain text file
+- **Interactive Menu**: View multiple reports in one session
+
+### Sample Output
+
+```
+========================================
+  QUALITY REPORT VIEWER
+========================================
+
+Found 3 report(s):
+
+[1] quality_comparison_2025-01-15_16-30-45.csv (2025-01-15 16:30:45, 2.5 KB)
+[2] quality_comparison_2025-01-15_14-20-12.csv (2025-01-15 14:20:12, 1.8 KB)
+[3] quality_comparison_2025-01-14_22-15-30.csv (2025-01-14 22:15:30, 3.2 KB)
+
+Select a report [1-3] or 'Q' to quit: 1
+
+========================================
+  QUALITY COMPARISON REPORT
+========================================
+Report: quality_comparison_2025-01-15_16-30-45.csv
+
+[1/2] vacation_2024
+  Source:  vacation_2024.mov (850.5 MB)
+  Encoded: vacation_2024.mp4 (425.3 MB)
+  Compression: 2.0x (50.0% saved)
+  Resolution: 3840x2160 -> 3840x2160
+  Bitrate: 38.4 Mbps -> 19.2 Mbps
+  Duration: 300s | Analysis Time: 245.6s
+
+  +-- Quality Metrics ---------------------+
+  | VMAF: 96.5  / 100                      |
+  | SSIM: 0.9875 / 1.00                    |
+  | PSNR: 43.2  dB                         |
+  +-----------------------------------------+
+  Assessment: Excellent
+
+Options:
+  [V] View another report
+  [E] Export to text file
+  [Q] Quit
+```
 
 ## Troubleshooting
 

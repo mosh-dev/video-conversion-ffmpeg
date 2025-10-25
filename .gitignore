@@ -5,6 +5,8 @@ output_files/*
 !output_files/.gitkeep
 logs/*
 !logs/.gitkeep
+reports/*
+!reports/.gitkeep
 
 # IDE configuration
 .idea/

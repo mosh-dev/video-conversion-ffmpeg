@@ -11,6 +11,8 @@ This is a video conversion workspace for batch converting video files from vario
 The codebase is organized into modular components:
 
 - **`convert_videos.ps1`** - Main conversion script orchestrating the entire process
+- **`compare_quality.ps1`** - Quality validation tool using VMAF/SSIM/PSNR metrics
+- **`view_reports.ps1`** - Interactive report viewer for browsing and displaying CSV quality reports
 - **`lib/config.ps1`** - Centralized configuration file with all user-modifiable parameters
 - **`lib/conversion_helpers.ps1`** - Helper functions for metadata detection, parameter selection, and bitrate calculation
 - **`lib/show_conversion_ui.ps1`** - Modern Windows 11-style GUI for interactive parameter selection
@@ -67,6 +69,64 @@ The script launches an interactive GUI where users can configure:
 - Bitrate multiplier (0.5x to 3.0x via slider)
 
 Default values are loaded from `config.ps1` and can be adjusted before starting conversion.
+
+## Quality Comparison Tool
+
+```powershell
+.\compare_quality.ps1
+```
+
+The quality comparison script validates re-encoded video quality using industry-standard metrics:
+
+**Metrics Used:**
+- **VMAF** (Video Multimethod Assessment Fusion) - Netflix's perceptual quality metric (0-100 scale)
+- **SSIM** (Structural Similarity Index) - Structural similarity metric (0-1 scale)
+- **PSNR** (Peak Signal-to-Noise Ratio) - Simple quality metric (dB scale)
+
+**Features:**
+- Automatic file matching between `input_files/` and `output_files/` directories
+- Handles container format changes and collision-renamed files
+- Color-coded console output based on quality thresholds
+- CSV report generation in `reports/` directory
+- Comprehensive statistics: compression ratio, bitrate comparison, quality distribution
+
+**Quality Thresholds:**
+- Excellent: VMAF ≥ 95, SSIM ≥ 0.98
+- Very Good: VMAF ≥ 90, SSIM ≥ 0.95
+- Acceptable: VMAF ≥ 85, SSIM ≥ 0.90
+- Poor: Below acceptable thresholds
+
+**Requirements:**
+- ffmpeg with libvmaf support (GPL builds from BtbN/FFmpeg-Builds)
+- Check availability: `ffmpeg -filters 2>&1 | Select-String libvmaf`
+
+**Performance:**
+- Quality analysis is CPU-intensive and slow (1-5x video duration)
+- Uses 4 threads by default (configurable in script)
+- No GPU acceleration available for quality metrics
+- Scales videos to matching resolution if needed for comparison
+- Runs three separate passes (VMAF, SSIM, PSNR) for compatibility
+
+## Report Viewer Tool
+
+```powershell
+.\view_reports.ps1
+```
+
+Interactive CSV report viewer for browsing and displaying quality comparison results:
+
+**Features:**
+- Lists all CSV reports from `reports/` directory sorted by date (newest first)
+- Displays formatted quality metrics with color-coded assessment
+- Shows summary statistics and quality distribution
+- Export formatted report to plain text file
+- Navigate between multiple reports in one session
+
+**Use Cases:**
+- Quick review of past quality comparisons
+- Compare results across different encoding settings
+- Share formatted reports without opening CSV in Excel
+- Archive quality metrics in human-readable format
 
 ## Configuration (lib/config.ps1)
 
@@ -234,13 +294,32 @@ The script handles a wide variety of video formats through the `$FileExtensions`
 ## Script Behavior Notes
 
 **Ctrl+C Handling:**
-- The script uses standard PowerShell behavior (no custom handlers)
+- Both `convert_videos.ps1` and `compare_quality.ps1` use standard PowerShell behavior (no custom handlers)
 - Press Ctrl+C once to immediately terminate the script
-- Any in-progress conversion will be interrupted
-- Temporary .tmp files are automatically cleaned up on next run
+- Any in-progress conversion/comparison will be interrupted
+- Temporary .tmp files are automatically cleaned up on next conversion run
 
 **Error Handling:**
 - `$ErrorActionPreference = "Continue"` allows processing to continue after errors
 - Individual file failures don't stop batch processing
-- All errors are logged to timestamped log file
+- All errors are logged to timestamped log file (conversion) or displayed on console (comparison)
 - Exit codes: 0 = success, 1 = user cancellation or error
+
+## Directory Structure
+
+```
+VideoConversion/
+├── input_files/          # Source videos for conversion
+├── output_files/         # Re-encoded videos
+├── logs/                 # Conversion logs (timestamped)
+├── reports/              # Quality comparison reports (CSV)
+├── lib/
+│   ├── config.ps1        # User configuration
+│   ├── conversion_helpers.ps1   # Helper functions
+│   └── show_conversion_ui.ps1   # GUI interface
+├── convert_videos.ps1    # Main conversion script
+├── compare_quality.ps1   # Quality validation tool
+├── view_reports.ps1      # Quality report viewer
+├── CLAUDE.md             # This file
+└── README.md             # User documentation
+```
