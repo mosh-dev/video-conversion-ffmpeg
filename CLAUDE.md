@@ -33,25 +33,42 @@ This modular separation allows users to modify settings in `config.ps1` without 
    - Applies `$BitrateModifier` to all bitrate values for fine-tuning
    - Implemented in `Get-DynamicParameters` function in `conversion_helpers.ps1`
 
-3. **Audio Compatibility Handling**: Automatic audio re-encoding for incompatible combinations:
-   - Detects incompatible audio/container pairs (WMAPro in MP4, Vorbis in MOV, etc.)
-   - Automatically re-encodes from potentially incompatible sources (WMV→MP4, AVI→MP4, MKV→MP4)
-   - Prevents "silent video" issues in browsers and mobile devices
+3. **Audio Compatibility Handling**: Intelligent audio codec detection and re-encoding:
+   - Uses ffprobe to detect actual audio codec (not file extension guessing)
+   - Automatically re-encodes incompatible codecs even when "Copy original audio" is selected
+   - Detects WMA (wmav1, wmav2, wmapro, wmalossless), Vorbis, DTS, PCM variants
+   - Validates compatibility for MP4/MOV/M4V and MKV containers separately
    - Falls back to AAC (universal compatibility) for MP4/MOV/M4V containers
+   - Prevents "silent video" issues in browsers and mobile devices
+   - Implemented in lines 216-265 of `convert_videos.ps1`
 
-4. **Filename Collision Detection**: Prevents overwriting when converting container formats:
+4. **Container/Codec Compatibility Validation**: Prevents incompatible codec/container combinations:
+   - Validates codec support when "Preserve original container" is enabled
+   - Automatically skips files with incompatible combinations with clear error messages
+   - Container restrictions:
+     - AVI: blocks AV1
+     - MOV/M4V: block AV1 (AV1 only supported in MP4/AVIF)
+     - WebM: blocks HEVC (only supports VP8, VP9, AV1)
+     - FLV: blocks AV1 and HEVC
+     - 3GP: blocks AV1
+     - WMV/ASF: block AV1 and HEVC
+     - VOB: blocks AV1 and HEVC
+     - OGV: blocks HEVC
+   - Implemented in lines 159-184 of `convert_videos.ps1`
+
+5. **Filename Collision Detection**: Prevents overwriting when converting container formats:
    - Detects when multiple source files with different extensions would produce same output name
    - Example: `video.ts` and `video.m2ts` both converting to `video.mp4`
    - Automatically renames with original extension: `video_ts.mp4`, `video_m2ts.mp4`
 
-5. **File Path Handling**: Robust handling of special characters:
+6. **File Path Handling**: Robust handling of special characters:
    - Uses `-LiteralPath` with `Test-Path` to avoid wildcard interpretation of `[]` brackets
    - Uses `Join-Path` for cross-platform path construction
    - Uses UTF-8 encoding without BOM for all file operations
 
-6. **Codec Abstraction**: User-friendly codec selection (`AV1`, `HEVC`) maps to ffmpeg codec names (`av1_nvenc`, `hevc_nvenc`) via `$CodecMap` hashtable
+7. **Codec Abstraction**: User-friendly codec selection (`AV1`, `HEVC`) maps to ffmpeg codec names (`av1_nvenc`, `hevc_nvenc`) via `$CodecMap` hashtable
 
-7. **MKV Stream Mapping**: Special handling for MKV files with complex streams:
+8. **MKV Stream Mapping**: Special handling for MKV files with complex streams:
    - Maps all streams (`-map 0`) to preserve video, audio, subtitles, and metadata
    - Adds `-fflags +genpts` to generate presentation timestamps
    - Uses `-ignore_unknown` to skip unsupported stream types
@@ -65,10 +82,19 @@ This modular separation allows users to modify settings in `config.ps1` without 
 The script launches an interactive GUI where users can configure:
 - Video codec (AV1 or HEVC)
 - Container format (preserve original or convert to specified format)
+  - When "Preserve original" is selected, incompatible codec/container combinations are skipped
+  - Audio encoding dropdown is automatically locked to "Copy original audio"
 - Audio encoding (copy original or re-encode)
-- Bitrate multiplier (0.5x to 3.0x via slider)
+  - Disabled/grayed out when preserving container (auto-set to copy)
+  - Incompatible audio codecs are auto-detected and re-encoded regardless of selection
+- Bitrate multiplier (0.1x to 3.0x via slider)
 
 Default values are loaded from `config.ps1` and can be adjusted before starting conversion.
+
+**GUI Features**:
+- Modern Windows 11 styling with dark/light mode support
+- Audio dropdown becomes disabled (50% opacity) when preserving container
+- Real-time validation prevents incompatible codec/container combinations
 
 ## Quality Validation Tool
 
@@ -251,13 +277,30 @@ When editing `convert_videos.ps1` or helper files:
    - Software decoding is never explicitly selected but serves as automatic fallback
    - Modify `$HWAccelMethod` logic in `convert_videos.ps1` to change selection criteria
 
-5. **Audio Compatibility Logic**: When `$PreserveAudio = $true`, the script checks for incompatible combinations:
-   - If output container is MP4/M4V/MOV AND source is WMV/AVI/MKV, audio is automatically re-encoded
-   - This prevents silent videos due to unsupported audio codecs (WMAPro, Vorbis, DTS, PCM variants)
-   - Override by explicitly setting `$AudioCodecToUse = "copy"` after the compatibility check
-   - See lines 351-362 in `convert_videos.ps1` for implementation
+5. **Audio Compatibility Logic**: Enhanced codec detection for accurate compatibility checking:
+   - Uses ffprobe to detect actual audio codec (lines 225-230)
+   - Defines incompatible codec lists for MP4/MOV/M4V and MKV containers (lines 233-234)
+   - WMA codecs (wmav1, wmav2, wmapro, wmalossless) are incompatible with MP4/MOV/MKV
+   - Vorbis, DTS, and PCM variants are incompatible with MP4/MOV
+   - Automatically re-encodes even when `$PreserveAudio = $true`
+   - Falls back to AAC for universal compatibility
+   - See lines 216-265 in `convert_videos.ps1` for implementation
 
-6. **MKV Special Handling**: MKV files use extended stream mapping:
+6. **Container/Codec Validation**: Prevents ffmpeg errors from incompatible combinations:
+   - Checks codec support before starting conversion (lines 159-184)
+   - Only validates when `$PreserveContainer = $true`
+   - Uses hashtable `$UnsupportedCombinations` to define restrictions
+   - Displays clear skip message with reason (e.g., "AV1 codec not supported by MOV container")
+   - Logs skipped files to conversion log
+
+7. **GUI Container/Audio Interaction**: Dynamic UI state management:
+   - When "Preserve original container" is selected, audio dropdown is forced to "Copy original audio"
+   - Audio dropdown becomes disabled (IsEnabled = false) with 50% opacity styling
+   - Container selection change event handler updates audio dropdown state dynamically
+   - Implemented in lines 616-634 of `lib/show_conversion_ui.ps1`
+   - Disabled state styling in lines 134-159 (ToggleButton opacity + ContentPresenter opacity)
+
+8. **MKV Special Handling**: MKV files use extended stream mapping:
    - `-map 0` preserves all streams (video, audio, subtitles, attachments, metadata)
    - `-fflags +genpts` generates presentation timestamps for playback compatibility
    - `-ignore_unknown` skips unsupported stream types without errors

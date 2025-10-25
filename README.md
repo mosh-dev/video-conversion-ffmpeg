@@ -11,7 +11,7 @@ A powerful batch video conversion tool with GPU acceleration, featuring an inter
 - **Smart Parameter Selection**: Automatically adjusts encoding parameters based on resolution and framerate
 - **Bitrate Control**: Fine-tune output quality with an adjustable bitrate slider (0.1x to 3.0x)
 - **Intelligent Bitrate Limiting**: Never exceeds source video bitrate to avoid quality loss
-- **Audio Compatibility Handling**: Automatically re-encodes incompatible audio codecs for target containers
+- **Audio Compatibility Handling**: Automatically detects and re-encodes incompatible audio codecs (WMA, Vorbis, DTS, etc.) for target containers
 - **Batch Processing**: Convert multiple videos with a single command
 - **Comprehensive Logging**: Timestamped logs with detailed conversion statistics
 - **Resume Support**: Automatically skips already-converted files
@@ -59,10 +59,14 @@ When you run the script, a GUI window appears with the following options:
 
 #### Container Format
 - **Preserve original**: Keeps original format (mkv → mkv, mp4 → mp4)
+  - Note: Audio encoding is automatically set to "Copy" when preserving container
+  - Incompatible codec/container combinations are automatically skipped (e.g., AV1 in MOV, HEVC in WebM)
 - **Convert all to [format]**: Converts all videos to the specified format
 
 #### Audio Encoding
-- **Copy original audio**: Fastest, preserves original quality (may have DTS compatibility issues)
+- **Copy original audio**: Fastest, preserves original quality
+  - Automatically disabled when preserving original container
+  - Script auto-detects incompatible audio codecs (WMA, Vorbis, DTS) and re-encodes when needed
 - **Re-encode to AAC/Opus**: Universal compatibility, slightly slower
 
 #### Bitrate Multiplier
@@ -424,13 +428,19 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 **Problem**: Video plays but no audio in some players
 
 **Solution**:
-1. The script **automatically detects** incompatible audio/container combinations
-2. When converting WMV/AVI/MKV to MP4/MOV, audio is automatically re-encoded if needed
-3. For manual control, select **Re-encode to AAC** in GUI
+1. The script **automatically detects** incompatible audio/container combinations using ffprobe
+2. Incompatible audio codecs are automatically re-encoded even when "Copy original audio" is selected
+3. For manual control, select **Re-encode to AAC/Opus** in GUI
 4. AAC is universally compatible with MP4/MOV/M4V containers
 5. Opus is best for MKV/WebM containers
 
-**Note**: The script automatically re-encodes WMAPro, Vorbis, DTS, and PCM audio when the target container doesn't support them.
+**Automatically Detected Incompatibilities**:
+- **WMA codecs** (wmav1, wmav2, wmapro, wmalossless): Re-encoded for MP4/MOV/MKV containers
+- **Vorbis audio**: Re-encoded for MP4/MOV containers
+- **DTS audio**: Re-encoded for MP4/MOV containers
+- **PCM audio** (pcm_s16le, pcm_s24le, pcm_s32le): Re-encoded for MP4/MOV containers
+
+**Note**: The script uses ffprobe to detect the actual audio codec, not just file extension, ensuring accurate compatibility checking.
 
 ### Large File Sizes
 **Problem**: Output files are larger than expected
@@ -521,9 +531,22 @@ The script uses intelligent hardware acceleration with automatic fallback:
 - **Copy** - Preserve original (fastest, but may have compatibility issues)
 
 **Audio Compatibility**:
-- The script automatically re-encodes incompatible audio when needed
-- Example: WMAPro audio → AAC when converting WMV to MP4
+- The script uses ffprobe to detect actual audio codec (not just file extension)
+- Automatically re-encodes incompatible audio even when "Copy original audio" is selected
+- Example: WMA audio → AAC when converting WMV to MP4
 - Prevents "silent video" issues in web browsers and mobile devices
+
+**Container/Codec Compatibility**:
+When "Preserve original container" is enabled, the script validates codec support:
+- **AVI**: Doesn't support AV1
+- **MOV/M4V**: Don't support AV1 (use MP4 for AV1)
+- **WebM**: Doesn't support HEVC (only VP8, VP9, AV1)
+- **FLV**: Doesn't support AV1 or HEVC
+- **3GP**: Doesn't support AV1
+- **WMV/ASF**: Don't support AV1 or HEVC
+- **OGV**: Doesn't support HEVC
+
+Incompatible combinations are automatically skipped with a clear error message.
 
 ## FAQ
 
