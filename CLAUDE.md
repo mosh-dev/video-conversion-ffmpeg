@@ -352,8 +352,8 @@ The script handles a wide variety of video formats through the `$FileExtensions`
 
 ```
 VideoConversion/
-├── input_files/          # Source videos for conversion
-├── output_files/         # Re-encoded videos
+├── _input_files/         # Source videos for conversion
+├── _output_files/        # Re-encoded videos
 ├── logs/                 # Conversion logs (timestamped)
 ├── reports/              # Quality validation reports (JSON)
 ├── lib/

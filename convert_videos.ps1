@@ -1,7 +1,7 @@
 # ============================================================================
 # VIDEO BATCH CONVERSION SCRIPT
 # ============================================================================
-# Converts video files from input_files to output_files using ffmpeg with NVIDIA CUDA acceleration
+# Converts video files from _input_files to _output_files using ffmpeg with NVIDIA CUDA acceleration
 #
 # Configuration is loaded from config.ps1
 # Edit config.ps1 to customize all parameters

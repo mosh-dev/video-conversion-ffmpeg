@@ -1,14 +1,14 @@
 # ============================================================================
 # VIDEO QUALITY COMPARISON SCRIPT
 # ============================================================================
-# Compares visual quality between source videos (input_files) and
-# re-encoded videos (output_files) using VMAF, SSIM, and PSNR metrics
+# Compares visual quality between source videos (_input_files) and
+# re-encoded videos (_output_files) using VMAF, SSIM, and PSNR metrics
 #
 # Requires: ffmpeg with libvmaf support
 
 # Configuration
-$InputDir = ".\input_files"
-$OutputDir = ".\output_files"
+$InputDir = ".\_input_files"
+$OutputDir = ".\_output_files"
 $ReportDir = ".\reports"
 $Timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
 $ReportFile = Join-Path $ReportDir "quality_comparison_$Timestamp.json"

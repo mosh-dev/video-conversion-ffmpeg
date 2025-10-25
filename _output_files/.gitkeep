@@ -1,0 +1,2 @@
+# This file ensures the reports directory is tracked in git
+# Quality comparison CSV reports will be saved here

@@ -206,8 +206,8 @@ function Format-Duration {
     return $HoursStr + ":" + $MinutesStr + ":" + $SecsStr
 }
 
-# Test all video files in input_files directory
-$InputDir = ".\input_files"
+# Test all video files in _input_files directory
+$InputDir = ".\_input_files"
 $VideoFiles = @()
 
 # Common video extensions

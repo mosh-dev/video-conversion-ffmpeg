@@ -9,8 +9,8 @@
 # ============================================================================
 
 # Input/Output Directories
-$InputDir = ".\input_files"
-$OutputDir = ".\output_files"
+$InputDir = ".\_input_files"
+$OutputDir = ".\_output_files"
 $LogDir = ".\logs"
 
 # Log file will be auto-generated with timestamp (e.g., conversion_2025-01-15_14-30-45.txt)

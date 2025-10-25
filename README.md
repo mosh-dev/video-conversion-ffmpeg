@@ -34,7 +34,7 @@ A powerful batch video conversion tool with GPU acceleration, featuring an inter
 
 ## Quick Start
 
-1. **Place your videos** in the `input_files/` folder
+1. **Place your videos** in the `_input_files/` folder
 2. **Run the script**:
    ```powershell
    .\convert_videos.ps1
@@ -45,7 +45,7 @@ A powerful batch video conversion tool with GPU acceleration, featuring an inter
    - Configure audio encoding
    - Adjust bitrate multiplier
 4. **Click Start** and wait for conversion to complete
-5. **Find converted videos** in the `output_files/` folder
+5. **Find converted videos** in the `_output_files/` folder
 
 ## Configuration
 
@@ -123,8 +123,8 @@ All bitrates are adjusted by the **Bitrate Multiplier** you set in the GUI.
 
 ```
 VideoConversion/
-├── input_files/          # Place source videos here
-├── output_files/         # Converted videos appear here
+├── _input_files/         # Place source videos here
+├── _output_files/        # Converted videos appear here
 ├── logs/                 # Timestamped conversion logs
 ├── reports/              # Quality validation reports (JSON)
 ├── lib/
@@ -140,13 +140,13 @@ VideoConversion/
 ## Usage Examples
 
 ### Example 1: Basic Conversion
-1. Copy videos to `input_files/`
+1. Copy videos to `_input_files/`
 2. Run `.\convert_videos.ps1`
 3. Select AV1 codec in GUI
 4. Click Start
 
 ### Example 2: High-Quality HEVC Conversion
-1. Place videos in `input_files/`
+1. Place videos in `_input_files/`
 2. Run `.\convert_videos.ps1`
 3. Select **HEVC** codec
 4. Set bitrate multiplier to **1.5x**
@@ -154,7 +154,7 @@ VideoConversion/
 6. Click Start
 
 ### Example 3: Quick Compression
-1. Add videos to `input_files/`
+1. Add videos to `_input_files/`
 2. Run `.\convert_videos.ps1`
 3. Select **AV1** codec
 4. Set bitrate multiplier to **0.8x**
@@ -229,7 +229,7 @@ The `analyze_quality.ps1` script validates the visual quality of your re-encoded
 ```
 
 The script will:
-1. Scan `input_files/` and `output_files/` directories
+1. Scan `_input_files/` and `_output_files/` directories
 2. Match source videos with their re-encoded versions (handles container changes)
 3. Calculate quality metrics using ffmpeg's libvmaf filter
 4. Generate console output with color-coded results
@@ -268,8 +268,8 @@ The script will:
   VIDEO QUALITY COMPARISON
 ========================================
 
-Found 3 source video(s) in .\input_files
-Found 3 encoded video(s) in .\output_files
+Found 3 source video(s) in .\_input_files
+Found 3 encoded video(s) in .\_output_files
 Found 3 matching pair(s) to compare
 
 ========================================
@@ -454,14 +454,14 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 Before batch processing, test ffmpeg with CUDA acceleration:
 
 ```powershell
-ffmpeg -hwaccel cuda -i ".\input_files\test.mp4" -c:v av1_nvenc -preset p6 -b:v 20M test_output.mp4
+ffmpeg -hwaccel cuda -i ".\_input_files\test.mp4" -c:v av1_nvenc -preset p6 -b:v 20M test_output.mp4
 ```
 
 ### Check Video Metadata
 Verify source video properties:
 
 ```powershell
-ffprobe -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate -of csv=p=0 ".\input_files\video.mp4"
+ffprobe -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate -of csv=p=0 ".\_input_files\video.mp4"
 ```
 
 ## Performance Tips
