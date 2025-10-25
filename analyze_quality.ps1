@@ -19,7 +19,8 @@ $VideoExtensions = @(".mp4", ".mov", ".mkv", ".wmv", ".avi", ".ts", ".m2ts", ".m
 # Performance tuning
 # Auto-detect CPU threads and use 80% (leave 20% for system responsiveness)
 $TotalThreads = [int]$env:NUMBER_OF_PROCESSORS
-$VMAF_Threads = [Math]::Max(1, [Math]::Floor($TotalThreads * 0.8))  # Use 80% of threads, minimum 1
+$VMAF_Threads = [Math]::Max(1, [Math]::Floor($TotalThreads * 1))  # Use 80% of threads, minimum 1
+# $VMAF_Threads = 20
 
 $VMAF_Subsample = 8              # Analyze every Nth frame (1=all frames, 2=every other frame, etc.)
                                  # Higher values = much faster but less accurate
@@ -185,6 +186,7 @@ function Compare-VideoQuality {
 
     # Build VMAF filter with performance options
     $vmafOptions = "log_fmt=json:log_path=NUL:n_threads=$VMAF_Threads"
+    # $vmafOptions = "log_fmt=json:log_path=NUL"
 
     # Add subsampling for faster analysis (analyze every Nth frame)
     if ($VMAF_Subsample -gt 1) {
@@ -428,7 +430,7 @@ Write-Host "Found $($matchedPairs.Count) matching pair(s) to compare" -Foregroun
 Write-Host ""
 Write-Host "Performance Settings:" -ForegroundColor Yellow
 Write-Host "  CPU Threads Available: $TotalThreads" -ForegroundColor DarkGray
-Write-Host "  VMAF Threads: $VMAF_Threads (80% of available)" -ForegroundColor White
+Write-Host "  VMAF Threads: $VMAF_Threads" -ForegroundColor White
 Write-Host "  Frame Sampling: " -NoNewline -ForegroundColor White
 if ($VMAF_Subsample -eq 1) {
     Write-Host "Every frame (full quality, slower)" -ForegroundColor Cyan
