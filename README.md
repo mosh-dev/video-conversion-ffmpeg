@@ -58,10 +58,11 @@ When you run the script, a GUI window appears with the following options:
 - **AV1**: Best compression, smallest file sizes, requires RTX 40+ series
 
 #### Container Format
+- **Convert all to MP4**: Converts all videos to MP4 format (universal compatibility)
+- **Convert all to MKV**: Converts all videos to MKV format (most flexible, supports all features)
 - **Preserve original**: Keeps original format (mkv → mkv, mp4 → mp4)
   - Note: Audio encoding is automatically set to "Copy" when preserving container
   - Incompatible codec/container combinations are automatically skipped (e.g., AV1 in MOV, HEVC in WebM)
-- **Convert all to [format]**: Converts all videos to the specified format
 
 ##### Container/Codec Compatibility Matrix
 
@@ -83,16 +84,17 @@ When you run the script, a GUI window appears with the following options:
 - **HEVC**: Works with 7 formats (MP4, MOV, MKV, TS, M2TS, M4V, AVI)
 - **AV1**: Works with 3 formats (MP4, MKV, WebM)
 
-**When converting to MP4 output format:**
+**When converting to MP4 or MKV output format:**
 
-| Codec Choice | Result |
-|--------------|--------|
-| HEVC | ✅ **All input formats convert to MP4 with HEVC** |
-| AV1 | ✅ **All input formats convert to MP4 with AV1** |
+| Output Format | HEVC Encoding | AV1 Encoding |
+|---------------|---------------|--------------|
+| MP4 | ✅ **All input formats work** | ✅ **All input formats work** |
+| MKV | ✅ **All input formats work** | ✅ **All input formats work** |
 
 **Recommendation:**
-- Use **"Preserve original container"** with **HEVC** for maximum compatibility
-- Use **"Convert to MP4"** with **either codec** for universal compatibility
+- Use **"Preserve original container"** with **HEVC** for maximum format compatibility (7 formats work)
+- Use **"Convert to MP4"** with **either codec** for universal player compatibility
+- Use **"Convert to MKV"** with **either codec** for maximum flexibility (supports all features like subtitles)
 - MP4 and MKV are the most flexible containers supporting both HEVC and AV1
 
 #### Audio Encoding

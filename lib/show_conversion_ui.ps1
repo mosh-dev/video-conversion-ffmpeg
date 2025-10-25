@@ -452,8 +452,9 @@ function Show-ConversionUI {
                             FontSize="13"
                             Padding="12,10"
                             Margin="0,0,0,24">
+                            <ComboBoxItem Content="Convert all to MP4"/>
+                            <ComboBoxItem Content="Convert all to MKV"/>
                             <ComboBoxItem Content="Preserve original"/>
-                            <ComboBoxItem Content="Convert all to $OutputExtension"/>
                         </ComboBox>
 
                         <!-- Audio Encoding -->
@@ -622,14 +623,23 @@ public class WindowHelper {
 
     # Set default values
     $codecCombo.SelectedIndex = if ($OutputCodec -eq "HEVC") { 0 } else { 1 }
-    $containerCombo.SelectedIndex = if ($PreserveContainer) { 0 } else { 1 }
+
+    # Set container combo based on preserve flag and output extension
+    if ($PreserveContainer) {
+        $containerCombo.SelectedIndex = 2  # Preserve original
+    } elseif ($OutputExtension -eq ".mkv") {
+        $containerCombo.SelectedIndex = 1  # Convert to MKV
+    } else {
+        $containerCombo.SelectedIndex = 0  # Convert to MP4 (default)
+    }
+
     $audioCombo.SelectedIndex = if ($PreserveAudio) { 0 } else { 1 }
     $bitrateSlider.Value = [int]($BitrateMultiplier * 10)
     $bitrateValue.Text = "$($BitrateMultiplier.ToString('0.0'))x"
 
     # Function to update audio combo state based on container selection
     $UpdateAudioComboState = {
-        if ($containerCombo.SelectedIndex -eq 0) {
+        if ($containerCombo.SelectedIndex -eq 2) {
             # Preserve original container selected - force audio copy and disable combo
             $audioCombo.SelectedIndex = 0
             $audioCombo.IsEnabled = $false
@@ -668,9 +678,18 @@ public class WindowHelper {
     $result = $window.ShowDialog()
 
     if ($result -eq $true) {
+        # Determine output extension based on container selection
+        $selectedExtension = switch ($containerCombo.SelectedIndex) {
+            0 { ".mp4" }     # Convert to MP4
+            1 { ".mkv" }     # Convert to MKV
+            2 { $null }      # Preserve original - extension determined per-file
+            default { ".mp4" }
+        }
+
         return @{
             Codec = if ($codecCombo.SelectedIndex -eq 0) { "HEVC" } else { "AV1" }
-            PreserveContainer = ($containerCombo.SelectedIndex -eq 0)
+            PreserveContainer = ($containerCombo.SelectedIndex -eq 2)
+            OutputExtension = $selectedExtension
             PreserveAudio = ($audioCombo.SelectedIndex -eq 0)
             BitrateMultiplier = $bitrateSlider.Value / 10.0
             Cancelled = $false

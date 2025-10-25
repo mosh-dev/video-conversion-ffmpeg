@@ -52,6 +52,11 @@ $PreserveContainer = $uiResult.PreserveContainer
 $PreserveAudio = $uiResult.PreserveAudio
 $BitrateMultiplier = $uiResult.BitrateMultiplier
 
+# Update output extension if user selected a specific format
+if (-not $PreserveContainer -and $uiResult.OutputExtension) {
+    $OutputExtension = $uiResult.OutputExtension
+}
+
 # Validate codec mappings
 if (-not (Test-CodecMappingsValid)) {
     Write-Host "`nERROR: Invalid codec mappings detected. Please check lib/codec_mappings.ps1" -ForegroundColor Red
