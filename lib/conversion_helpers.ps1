@@ -10,25 +10,33 @@ function Get-VideoMetadata {
 
     try {
         # Get resolution (TS/M2TS files may return multiple lines, so take first non-empty line)
-        $WidthOutput = (& ffprobe -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1).Trim().TrimEnd(',')
-        $HeightOutput = (& ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1).Trim().TrimEnd(',')
-        $FPSOutput = (& ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1).Trim().TrimEnd(',')
+        $WidthRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $WidthOutput = if ($WidthRaw) { $WidthRaw.Trim().TrimEnd(',') } else { "" }
+
+        $HeightRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $HeightOutput = if ($HeightRaw) { $HeightRaw.Trim().TrimEnd(',') } else { "" }
+
+        $FPSRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $FPSOutput = if ($FPSRaw) { $FPSRaw.Trim().TrimEnd(',') } else { "" }
 
         # Try to get bitrate from video stream first (TS/M2TS files may return multiple lines)
-        $BitrateOutput = (& ffprobe -v error -select_streams v:0 -show_entries stream=bit_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1).Trim().TrimEnd(',')
+        $BitrateRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=bit_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $BitrateOutput = if ($BitrateRaw) { $BitrateRaw.Trim().TrimEnd(',') } else { "" }
 
         # If stream bitrate is N/A or empty, try format bitrate (common for MKV, TS, M2TS files)
         if (-not $BitrateOutput -or $BitrateOutput -eq "N/A" -or $BitrateOutput -eq "") {
-            $BitrateOutput = (& ffprobe -v error -show_entries format=bit_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1).Trim().TrimEnd(',')
+            $BitrateFormatRaw = & ffprobe -v error -show_entries format=bit_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+            $BitrateOutput = if ($BitrateFormatRaw) { $BitrateFormatRaw.Trim().TrimEnd(',') } else { "" }
         }
 
-        $Width = [int]$WidthOutput
-        $Height = [int]$HeightOutput
+        $Width = if ($WidthOutput) { [int]$WidthOutput } else { 0 }
+        $Height = if ($HeightOutput) { [int]$HeightOutput } else { 0 }
 
         # Parse FPS (format: "60000/1001" or "60/1")
+        $FPS = 0
         if ($FPSOutput -match "(\d+)/(\d+)") {
             $FPS = [math]::Round([double]$matches[1] / [double]$matches[2], 2)
-        } else {
+        } elseif ($FPSOutput) {
             $FPS = [double]$FPSOutput
         }
 
@@ -49,8 +57,9 @@ function Get-VideoMetadata {
         if ($Bitrate -eq 0) {
             try {
                 # Get video duration in seconds (handle potential multiple lines)
-                $DurationOutput = (& ffprobe -v error -show_entries format=duration -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1).Trim().TrimEnd(',')
-                $Duration = [double]$DurationOutput
+                $DurationRaw = & ffprobe -v error -show_entries format=duration -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+                $DurationOutput = if ($DurationRaw) { $DurationRaw.Trim().TrimEnd(',') } else { "" }
+                $Duration = if ($DurationOutput) { [double]$DurationOutput } else { 0 }
 
                 # Get file size in bytes
                 $FileInfo = Get-Item -LiteralPath $FilePath
@@ -90,7 +99,7 @@ function Get-VideoMetadata {
             Resolution = "${Width}x${Height}"
         }
     } catch {
-        Write-Host "  Warning: Could not read video metadata" -ForegroundColor Yellow
+        Write-Host "  Warning: Could not read video metadata - $($_.Exception.Message)" -ForegroundColor Yellow
         return $null
     }
 }
