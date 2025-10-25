@@ -277,5 +277,40 @@ function Get-DynamicParameters {
     $FallbackBitrate = Set-BitrateMultiplier -Bitrate "15M" -Modifier $BitrateMultiplier
     $FallbackMaxRate = Set-BitrateMultiplier -Bitrate "25M" -Modifier $BitrateMultiplier
     $FallbackBufSize = Set-BitrateMultiplier -Bitrate "30M" -Modifier $BitrateMultiplier
-    return @{ ProfileName = "Fallback Default"; VideoBitrate = $FallbackBitrate; MaxRate = $FallbackMaxRate; BufSize = $FallbackBufSize; Preset = "p7" }
+    return @{ ProfileName = "Fallback Default"; VideoBitrate = $FallbackBitrate; MaxRate = $FallbackMaxRate; BufSize = $FallbackBufSize }
+}
+
+# Function to get appropriate AAC sample rate based on source audio
+function Get-AACSampleRate {
+    param([string]$InputPath)
+
+    # AAC supported sampling rates (in Hz)
+    $AACSupportedRates = @(8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000, 64000, 88200, 96000)
+
+    try {
+        # Get source audio sample rate using ffprobe
+        $SampleRateRaw = & ffprobe -v error -select_streams a:0 -show_entries stream=sample_rate -of csv=p=0 $InputPath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $SourceSampleRate = if ($SampleRateRaw) { [int]$SampleRateRaw.Trim() } else { 0 }
+
+        # If we couldn't detect sample rate, default to 48000 Hz
+        if ($SourceSampleRate -eq 0) {
+            return 48000
+        }
+
+        # If source rate is higher than 48000 Hz, use 48000 Hz
+        if ($SourceSampleRate -gt 48000) {
+            return 48000
+        }
+
+        # If source rate is in the AAC supported list, keep it
+        if ($AACSupportedRates -contains $SourceSampleRate) {
+            return $SourceSampleRate
+        }
+
+        # If source rate is not supported, use 48000 Hz (most common for video)
+        return 48000
+    } catch {
+        # On error, default to 48000 Hz
+        return 48000
+    }
 }

@@ -12,7 +12,8 @@ function Show-ConversionUI {
         [double]$BitrateMultiplier,
         [string]$OutputExtension,
         [string]$AudioCodec,
-        [string]$DefaultAudioBitrate
+        [string]$DefaultAudioBitrate,
+        [string]$DefaultPreset
     )
 
     Add-Type -AssemblyName PresentationFramework
@@ -80,7 +81,7 @@ function Show-ConversionUI {
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Width="600"
-    Height="700"
+    Height="820"
     WindowStartupLocation="CenterScreen"
     ResizeMode="NoResize"
     WindowStyle="None"
@@ -286,25 +287,27 @@ function Show-ConversionUI {
         <!-- Modern ScrollBar Style -->
         <Style TargetType="ScrollBar">
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Width" Value="12"/>
+            <Setter Property="Width" Value="6"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ScrollBar">
                         <Grid>
-                            <Border Background="{TemplateBinding Background}" CornerRadius="6"/>
-                            <Track x:Name="PART_Track" IsDirectionReversed="True">
+                            <Border Background="{TemplateBinding Background}" CornerRadius="3" Width="6"/>
+                            <Track x:Name="PART_Track" IsDirectionReversed="True" Width="6">
                                 <Track.Thumb>
-                                    <Thumb>
+                                    <Thumb Width="6">
                                         <Thumb.Template>
-                                            <ControlTemplate>
+                                            <ControlTemplate TargetType="Thumb">
                                                 <Border
                                                     x:Name="ThumbBorder"
                                                     Background="$secondaryTextColor"
-                                                    CornerRadius="6"
-                                                    Opacity="0.5"/>
+                                                    CornerRadius="3"
+                                                    Width="6"
+                                                    Opacity="0.3"/>
                                                 <ControlTemplate.Triggers>
                                                     <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter TargetName="ThumbBorder" Property="Opacity" Value="0.7"/>
+                                                        <Setter TargetName="ThumbBorder" Property="Opacity" Value="0.6"/>
+                                                        <Setter TargetName="ThumbBorder" Property="Background" Value="$accentColor"/>
                                                     </Trigger>
                                                 </ControlTemplate.Triggers>
                                             </ControlTemplate>
@@ -437,6 +440,59 @@ function Show-ConversionUI {
                             <ComboBoxItem Content="AV1 - Best compression (RTX 40+ only)"/>
                         </ComboBox>
 
+                        <!-- Preset Slider -->
+                        <Grid Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock
+                                Grid.Column="0"
+                                Text="Encoding Preset"
+                                FontFamily="Segoe UI Variable, Segoe UI"
+                                FontSize="14"
+                                FontWeight="SemiBold"
+                                Foreground="$textColor"
+                                VerticalAlignment="Center"/>
+                            <TextBlock
+                                x:Name="PresetValue"
+                                Grid.Column="1"
+                                Text="p7"
+                                FontFamily="Segoe UI Variable, Segoe UI"
+                                FontSize="16"
+                                FontWeight="Bold"
+                                Foreground="$accentColor"
+                                VerticalAlignment="Center"/>
+                        </Grid>
+
+                        <Slider
+                            x:Name="PresetSlider"
+                            Style="{StaticResource ModernSlider}"
+                            Minimum="1"
+                            Maximum="7"
+                            Value="7"
+                            TickFrequency="1"
+                            IsSnapToTickEnabled="True"
+                            Margin="0,0,0,8"/>
+
+                        <Grid Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="p1 (fastest)" FontSize="11" Foreground="$secondaryTextColor" HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Column="1" Text="p4" FontSize="11" Foreground="$secondaryTextColor" HorizontalAlignment="Center"/>
+                            <TextBlock Grid.Column="2" Text="p7 (slowest, best)" FontSize="11" Foreground="$secondaryTextColor" HorizontalAlignment="Right"/>
+                        </Grid>
+
+                        <TextBlock
+                            Text="p1 = Fastest encoding, p7 = Slowest encoding with best compression and quality"
+                            FontSize="11"
+                            FontStyle="Italic"
+                            Foreground="$secondaryTextColor"
+                            Margin="0,0,0,20"/>
+
                         <!-- Container Format -->
                         <TextBlock
                             Text="Container Format"
@@ -457,26 +513,7 @@ function Show-ConversionUI {
                             <ComboBoxItem Content="Preserve original"/>
                         </ComboBox>
 
-                        <!-- Audio Encoding -->
-                        <TextBlock
-                            Text="Audio Encoding"
-                            FontFamily="Segoe UI Variable, Segoe UI"
-                            FontSize="14"
-                            FontWeight="SemiBold"
-                            Foreground="$textColor"
-                            Margin="0,0,0,8"/>
-                        <ComboBox
-                            x:Name="AudioCombo"
-                            Style="{StaticResource ModernComboBox}"
-                            FontFamily="Segoe UI Variable, Segoe UI"
-                            FontSize="13"
-                            Padding="12,10"
-                            Margin="0,0,0,24">
-                            <ComboBoxItem Content="Copy original audio (fastest, keeps quality)"/>
-                            <ComboBoxItem Content="Re-encode to $($AudioCodec.ToUpper()) @ $DefaultAudioBitrate"/>
-                        </ComboBox>
-
-                        <!-- Bitrate Multiplier -->
+                        <!-- Video Bitrate Multiplier -->
                         <Grid Margin="0,0,0,12">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -484,7 +521,7 @@ function Show-ConversionUI {
                             </Grid.ColumnDefinitions>
                             <TextBlock
                                 Grid.Column="0"
-                                Text="Bitrate Multiplier"
+                                Text="Video Bitrate Multiplier"
                                 FontFamily="Segoe UI Variable, Segoe UI"
                                 FontSize="14"
                                 FontWeight="SemiBold"
@@ -523,11 +560,85 @@ function Show-ConversionUI {
                         </Grid>
 
                         <TextBlock
-                            Text="Adjust encoding quality and file size"
+                            Text="Adjust video encoding quality and file size"
                             FontSize="11"
                             FontStyle="Italic"
                             Foreground="$secondaryTextColor"
                             Margin="0,0,0,20"/>
+
+                        <!-- Audio Encoding -->
+                        <TextBlock
+                            Text="Audio Encoding"
+                            FontFamily="Segoe UI Variable, Segoe UI"
+                            FontSize="14"
+                            FontWeight="SemiBold"
+                            Foreground="$textColor"
+                            Margin="0,0,0,8"/>
+                        <ComboBox
+                            x:Name="AudioCombo"
+                            Style="{StaticResource ModernComboBox}"
+                            FontFamily="Segoe UI Variable, Segoe UI"
+                            FontSize="13"
+                            Padding="12,10"
+                            Margin="0,0,0,24">
+                            <ComboBoxItem Content="Copy original audio (fastest, keeps quality)"/>
+                            <ComboBoxItem Content="Re-encode to $($AudioCodec.ToUpper())"/>
+                        </ComboBox>
+
+                        <!-- AAC Bitrate Slider (conditional) -->
+                        <StackPanel x:Name="AACBitratePanel" Visibility="Collapsed" Margin="0,0,0,0">
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock
+                                    Grid.Column="0"
+                                    Text="AAC Audio Bitrate"
+                                    FontFamily="Segoe UI Variable, Segoe UI"
+                                    FontSize="14"
+                                    FontWeight="SemiBold"
+                                    Foreground="$textColor"
+                                    VerticalAlignment="Center"/>
+                                <TextBlock
+                                    x:Name="AACBitrateValue"
+                                    Grid.Column="1"
+                                    Text="256 kbps"
+                                    FontFamily="Segoe UI Variable, Segoe UI"
+                                    FontSize="16"
+                                    FontWeight="Bold"
+                                    Foreground="$accentColor"
+                                    VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <Slider
+                                x:Name="AACBitrateSlider"
+                                Style="{StaticResource ModernSlider}"
+                                Minimum="96"
+                                Maximum="320"
+                                Value="256"
+                                TickFrequency="8"
+                                IsSnapToTickEnabled="True"
+                                Margin="0,0,0,8"/>
+
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="96 kbps" FontSize="11" Foreground="$secondaryTextColor" HorizontalAlignment="Left"/>
+                                <TextBlock Grid.Column="1" Text="208 kbps" FontSize="11" Foreground="$secondaryTextColor" HorizontalAlignment="Center"/>
+                                <TextBlock Grid.Column="2" Text="320 kbps" FontSize="11" Foreground="$secondaryTextColor" HorizontalAlignment="Right"/>
+                            </Grid>
+
+                            <TextBlock
+                                Text="Higher bitrate = better audio quality, larger file size"
+                                FontSize="11"
+                                FontStyle="Italic"
+                                Foreground="$secondaryTextColor"
+                                Margin="0,0,0,20"/>
+                        </StackPanel>
 
                         <!-- Info Box -->
                         <Border
@@ -609,10 +720,15 @@ public class WindowHelper {
     # Get controls
     $titleBar = $window.FindName("TitleBar")
     $codecCombo = $window.FindName("CodecCombo")
+    $presetSlider = $window.FindName("PresetSlider")
+    $presetValue = $window.FindName("PresetValue")
     $containerCombo = $window.FindName("ContainerCombo")
-    $audioCombo = $window.FindName("AudioCombo")
     $bitrateSlider = $window.FindName("BitrateSlider")
     $bitrateValue = $window.FindName("BitrateValue")
+    $audioCombo = $window.FindName("AudioCombo")
+    $aacBitratePanel = $window.FindName("AACBitratePanel")
+    $aacBitrateSlider = $window.FindName("AACBitrateSlider")
+    $aacBitrateValue = $window.FindName("AACBitrateValue")
     $startButton = $window.FindName("StartButton")
     $cancelButton = $window.FindName("CancelButton")
 
@@ -624,6 +740,14 @@ public class WindowHelper {
     # Set default values
     $codecCombo.SelectedIndex = if ($OutputCodec -eq "HEVC") { 0 } else { 1 }
 
+    # Parse preset value (e.g., "p7" -> 7)
+    $presetNumber = 7  # Default to p7
+    if ($DefaultPreset -match "^p?(\d+)$") {
+        $presetNumber = [int]$matches[1]
+    }
+    $presetSlider.Value = $presetNumber
+    $presetValue.Text = "p$presetNumber"
+
     # Set container combo based on preserve flag and output extension
     if ($PreserveContainer) {
         $containerCombo.SelectedIndex = 2  # Preserve original
@@ -633,19 +757,38 @@ public class WindowHelper {
         $containerCombo.SelectedIndex = 0  # Convert to MP4 (default)
     }
 
-    $audioCombo.SelectedIndex = if ($PreserveAudio) { 0 } else { 1 }
     $bitrateSlider.Value = [int]($BitrateMultiplier * 10)
     $bitrateValue.Text = "$($BitrateMultiplier.ToString('0.0'))x"
 
-    # Function to update audio combo state based on container selection
+    $audioCombo.SelectedIndex = if ($PreserveAudio) { 0 } else { 1 }
+
+    # Parse audio bitrate (e.g., "256k" -> 256)
+    $audioBitrateNumber = 256  # Default to 256 kbps
+    if ($DefaultAudioBitrate -match "^(\d+)k?$") {
+        $audioBitrateNumber = [int]$matches[1]
+    }
+    $aacBitrateSlider.Value = $audioBitrateNumber
+    $aacBitrateValue.Text = "$audioBitrateNumber kbps"
+
+    # Function to update audio combo and AAC bitrate visibility
     $UpdateAudioComboState = {
         if ($containerCombo.SelectedIndex -eq 2) {
             # Preserve original container selected - force audio copy and disable combo
             $audioCombo.SelectedIndex = 0
             $audioCombo.IsEnabled = $false
+            $aacBitratePanel.Visibility = [System.Windows.Visibility]::Collapsed
+            $window.Height = 820  # Smaller height when AAC slider is hidden
         } else {
             # Convert container selected - enable audio combo
             $audioCombo.IsEnabled = $true
+            # Show AAC bitrate slider only if re-encode is selected
+            if ($audioCombo.SelectedIndex -eq 1) {
+                $aacBitratePanel.Visibility = [System.Windows.Visibility]::Visible
+                $window.Height = 970  # Expanded height when AAC slider is shown
+            } else {
+                $aacBitratePanel.Visibility = [System.Windows.Visibility]::Collapsed
+                $window.Height = 820  # Smaller height when AAC slider is hidden
+            }
         }
     }
 
@@ -657,10 +800,27 @@ public class WindowHelper {
         & $UpdateAudioComboState
     })
 
-    # Slider event
+    # Audio combo event - update AAC bitrate visibility when audio encoding changes
+    $audioCombo.Add_SelectionChanged({
+        & $UpdateAudioComboState
+    })
+
+    # Preset slider event
+    $presetSlider.Add_ValueChanged({
+        $value = [int]$presetSlider.Value
+        $presetValue.Text = "p$value"
+    })
+
+    # Video bitrate slider event
     $bitrateSlider.Add_ValueChanged({
         $value = $bitrateSlider.Value / 10.0
         $bitrateValue.Text = "$($value.ToString('0.0'))x"
+    })
+
+    # AAC bitrate slider event
+    $aacBitrateSlider.Add_ValueChanged({
+        $value = [int]$aacBitrateSlider.Value
+        $aacBitrateValue.Text = "$value kbps"
     })
 
     # Button events
@@ -688,10 +848,12 @@ public class WindowHelper {
 
         return @{
             Codec = if ($codecCombo.SelectedIndex -eq 0) { "HEVC" } else { "AV1" }
+            Preset = "p$([int]$presetSlider.Value)"
             PreserveContainer = ($containerCombo.SelectedIndex -eq 2)
             OutputExtension = $selectedExtension
-            PreserveAudio = ($audioCombo.SelectedIndex -eq 0)
             BitrateMultiplier = $bitrateSlider.Value / 10.0
+            PreserveAudio = ($audioCombo.SelectedIndex -eq 0)
+            AACBitrate = [int]$aacBitrateSlider.Value
             Cancelled = $false
         }
     } else {

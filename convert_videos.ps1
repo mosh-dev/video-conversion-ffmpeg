@@ -37,7 +37,8 @@ $uiResult = Show-ConversionUI -OutputCodec $OutputCodec `
                               -BitrateMultiplier $BitrateMultiplier `
                               -OutputExtension $OutputExtension `
                               -AudioCodec $AudioCodec `
-                              -DefaultAudioBitrate $DefaultAudioBitrate
+                              -DefaultAudioBitrate $DefaultAudioBitrate `
+                              -DefaultPreset $DefaultPreset
 
 # Check if user cancelled
 if ($uiResult.Cancelled) {
@@ -51,6 +52,8 @@ $DefaultVideoCodec = $CodecMap[$OutputCodec]
 $PreserveContainer = $uiResult.PreserveContainer
 $PreserveAudio = $uiResult.PreserveAudio
 $BitrateMultiplier = $uiResult.BitrateMultiplier
+$SelectedPreset = $uiResult.Preset
+$SelectedAACBitrate = $uiResult.AACBitrate
 
 # Update output extension if user selected a specific format
 if (-not $PreserveContainer -and $uiResult.OutputExtension) {
@@ -107,8 +110,7 @@ if ($VideoFiles.Count -eq 0) {
 }
 
 # Display comprehensive conversion configuration
-$ModeStr = if ($UseDynamicParameters) { "Dynamic" } else { "Default" }
-$AudioDisplay = if ($PreserveAudio) { "Copy original" } else { "Re-encode to $($AudioCodec.ToUpper()) @ $DefaultAudioBitrate" }
+$AudioDisplay = if ($PreserveAudio) { "Copy original" } else { "Re-encode to $($AudioCodec.ToUpper()) @ ${SelectedAACBitrate}kbps" }
 $ContainerDisplay = if ($PreserveContainer) { "Preserve original" } else { "Convert to $OutputExtension" }
 $SkipModeDisplay = if ($SkipExistingFiles) { "Skip existing" } else { "Overwrite all" }
 
@@ -117,7 +119,7 @@ Write-Host "  CONVERSION SETTINGS" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  Files:               $($VideoFiles.Count) video(s) found" -ForegroundColor White
 Write-Host "  Output Video Codec:  $OutputCodec" -ForegroundColor White
-Write-Host "  Parameter Mode:      $ModeStr" -ForegroundColor White
+Write-Host "  Encoding Preset:     $SelectedPreset" -ForegroundColor White
 Write-Host "  Bitrate Multiplier:  $($BitrateMultiplier.ToString('0.0'))x" -ForegroundColor White
 Write-Host "  Container:           $ContainerDisplay" -ForegroundColor White
 Write-Host "  Audio:               $AudioDisplay" -ForegroundColor White
@@ -129,7 +131,7 @@ Write-Host "========================================`n" -ForegroundColor Cyan
 [System.IO.File]::AppendAllText($LogFile, ("=" * 80) + "`n", [System.Text.UTF8Encoding]::new($false))
 [System.IO.File]::AppendAllText($LogFile, "Files:               $($VideoFiles.Count) video(s) found`n", [System.Text.UTF8Encoding]::new($false))
 [System.IO.File]::AppendAllText($LogFile, "Output Video Codec:  $OutputCodec`n", [System.Text.UTF8Encoding]::new($false))
-[System.IO.File]::AppendAllText($LogFile, "Parameter Mode:      $ModeStr`n", [System.Text.UTF8Encoding]::new($false))
+[System.IO.File]::AppendAllText($LogFile, "Encoding Preset:     $SelectedPreset`n", [System.Text.UTF8Encoding]::new($false))
 [System.IO.File]::AppendAllText($LogFile, "Bitrate Multiplier:  $($BitrateMultiplier.ToString('0.0'))x`n", [System.Text.UTF8Encoding]::new($false))
 [System.IO.File]::AppendAllText($LogFile, "Container:           $ContainerDisplay`n", [System.Text.UTF8Encoding]::new($false))
 [System.IO.File]::AppendAllText($LogFile, "Audio:               $AudioDisplay`n", [System.Text.UTF8Encoding]::new($false))
@@ -196,67 +198,60 @@ foreach ($File in $VideoFiles) {
         }
     }
 
-    # Determine parameters to use
-    $VideoBitrate = $DefaultVideoBitrate
-    $MaxRate = $DefaultMaxRate
-    $BufSize = $DefaultBufSize
-    $Preset = $DefaultPreset
-
-
     # Get input file size (use $File object directly to avoid path issues)
     $InputSizeMB = [math]::Round($File.Length / 1MB, 2)
 
-    # Get video metadata and apply dynamic parameters if enabled
-    $SourceBitrate = 0
-    if ($UseDynamicParameters) {
-        $Metadata = Get-VideoMetadata -FilePath $InputPath
-        if ($Metadata) {
-            $DynamicParams = Get-DynamicParameters -Width $Metadata.Width -FPS $Metadata.FPS
-            $VideoBitrate = $DynamicParams.VideoBitrate
-            $MaxRate = $DynamicParams.MaxRate
-            $BufSize = $DynamicParams.BufSize
-            $Preset = $DynamicParams.Preset
-            $ProfileName = $DynamicParams.ProfileName
-            $SourceBitrate = $Metadata.Bitrate
+    # Get video metadata and apply dynamic parameters
+    $Metadata = Get-VideoMetadata -FilePath $InputPath
+    $Preset = $SelectedPreset  # Use preset from UI
 
-            # Check if calculated bitrate exceeds source bitrate
-            $LimitResult = Limit-BitrateToSource -TargetBitrate $VideoBitrate -MaxRate $MaxRate -BufSize $BufSize -SourceBitrate $SourceBitrate
-            $VideoBitrate = $LimitResult.VideoBitrate
-            $MaxRate = $LimitResult.MaxRate
-            $BufSize = $LimitResult.BufSize
+    if ($Metadata) {
+        # Get dynamic parameters based on resolution and FPS
+        $DynamicParams = Get-DynamicParameters -Width $Metadata.Width -FPS $Metadata.FPS
+        $VideoBitrate = $DynamicParams.VideoBitrate
+        $MaxRate = $DynamicParams.MaxRate
+        $BufSize = $DynamicParams.BufSize
+        $ProfileName = $DynamicParams.ProfileName
+        $SourceBitrate = $Metadata.Bitrate
 
-            Write-Host "[$CurrentFile/$($VideoFiles.Count)] $($File.Name) ($InputSizeMB MB)" -ForegroundColor Cyan
-            Write-Host "  Resolution: $($Metadata.Resolution) @ $($Metadata.FPS)fps | Profile: $ProfileName" -ForegroundColor White
+        # Check if calculated bitrate exceeds source bitrate
+        $LimitResult = Limit-BitrateToSource -TargetBitrate $VideoBitrate -MaxRate $MaxRate -BufSize $BufSize -SourceBitrate $SourceBitrate
+        $VideoBitrate = $LimitResult.VideoBitrate
+        $MaxRate = $LimitResult.MaxRate
+        $BufSize = $LimitResult.BufSize
 
-            if ($LimitResult.Adjusted) {
+        Write-Host "[$CurrentFile/$($VideoFiles.Count)] $($File.Name) ($InputSizeMB MB)" -ForegroundColor Cyan
+        Write-Host "  Resolution: $($Metadata.Resolution) @ $($Metadata.FPS)fps | Profile: $ProfileName" -ForegroundColor White
+
+        if ($LimitResult.Adjusted) {
+            $SourceBitrateStr = ConvertTo-BitrateString -BitsPerSecond $SourceBitrate
+            $BitrateMethodDisplay = if ($Metadata.BitrateMethod -eq "calculated") { " [calculated]" } else { "" }
+            Write-Host "  Bitrate adjusted: $($LimitResult.OriginalBitrate) -> $VideoBitrate (source: $SourceBitrateStr$BitrateMethodDisplay)" -ForegroundColor Yellow
+            Write-Host "  Settings: Bitrate=$VideoBitrate MaxRate=$MaxRate BufSize=$BufSize Preset=$Preset" -ForegroundColor Gray
+            [System.IO.File]::AppendAllText($LogFile, "Processing: $($File.Name) - $($Metadata.Resolution) @ $($Metadata.FPS)fps - Profile: $ProfileName - Input: $InputSizeMB MB`n", [System.Text.UTF8Encoding]::new($false))
+            [System.IO.File]::AppendAllText($LogFile, "  Source Bitrate: $SourceBitrateStr ($($Metadata.BitrateMethod))`n", [System.Text.UTF8Encoding]::new($false))
+            [System.IO.File]::AppendAllText($LogFile, "  Bitrate adjusted: $($LimitResult.OriginalBitrate) -> $VideoBitrate`n", [System.Text.UTF8Encoding]::new($false))
+            [System.IO.File]::AppendAllText($LogFile, "  Settings: Bitrate=$VideoBitrate, MaxRate=$MaxRate, BufSize=$BufSize, Preset=$Preset`n", [System.Text.UTF8Encoding]::new($false))
+        } else {
+            # Check if source bitrate was not available
+            if ($SourceBitrate -eq 0) {
+                Write-Host "  Source bitrate unknown - using profile bitrate" -ForegroundColor DarkGray
+            } else {
                 $SourceBitrateStr = ConvertTo-BitrateString -BitsPerSecond $SourceBitrate
                 $BitrateMethodDisplay = if ($Metadata.BitrateMethod -eq "calculated") { " [calculated]" } else { "" }
-                Write-Host "  Bitrate adjusted: $($LimitResult.OriginalBitrate) -> $VideoBitrate (source: $SourceBitrateStr$BitrateMethodDisplay)" -ForegroundColor Yellow
-                Write-Host "  Settings: Bitrate=$VideoBitrate MaxRate=$MaxRate BufSize=$BufSize Preset=$Preset" -ForegroundColor Gray
-                [System.IO.File]::AppendAllText($LogFile, "Processing: $($File.Name) - $($Metadata.Resolution) @ $($Metadata.FPS)fps - Profile: $ProfileName - Input: $InputSizeMB MB`n", [System.Text.UTF8Encoding]::new($false))
-                [System.IO.File]::AppendAllText($LogFile, "  Source Bitrate: $SourceBitrateStr ($($Metadata.BitrateMethod))`n", [System.Text.UTF8Encoding]::new($false))
-                [System.IO.File]::AppendAllText($LogFile, "  Bitrate adjusted: $($LimitResult.OriginalBitrate) -> $VideoBitrate`n", [System.Text.UTF8Encoding]::new($false))
-                [System.IO.File]::AppendAllText($LogFile, "  Settings: Bitrate=$VideoBitrate, MaxRate=$MaxRate, BufSize=$BufSize, Preset=$Preset`n", [System.Text.UTF8Encoding]::new($false))
-            } else {
-                # Check if source bitrate was not available
-                if ($SourceBitrate -eq 0) {
-                    Write-Host "  Source bitrate unknown - using profile bitrate" -ForegroundColor DarkGray
-                } else {
-                    $SourceBitrateStr = ConvertTo-BitrateString -BitsPerSecond $SourceBitrate
-                    $BitrateMethodDisplay = if ($Metadata.BitrateMethod -eq "calculated") { " [calculated]" } else { "" }
-                    Write-Host "  Source bitrate: $SourceBitrateStr$BitrateMethodDisplay - using profile bitrate" -ForegroundColor DarkGray
-                }
-                Write-Host "  Settings: Bitrate=$VideoBitrate MaxRate=$MaxRate BufSize=$BufSize Preset=$Preset" -ForegroundColor Gray
-                [System.IO.File]::AppendAllText($LogFile, "Processing: $($File.Name) - $($Metadata.Resolution) @ $($Metadata.FPS)fps - Profile: $ProfileName - Input: $InputSizeMB MB`n", [System.Text.UTF8Encoding]::new($false))
-                [System.IO.File]::AppendAllText($LogFile, "  Source Bitrate: $(if ($SourceBitrate -gt 0) { "$SourceBitrateStr ($($Metadata.BitrateMethod))" } else { "unknown" })`n", [System.Text.UTF8Encoding]::new($false))
-                [System.IO.File]::AppendAllText($LogFile, "  Settings: Bitrate=$VideoBitrate, MaxRate=$MaxRate, BufSize=$BufSize, Preset=$Preset`n", [System.Text.UTF8Encoding]::new($false))
+                Write-Host "  Source bitrate: $SourceBitrateStr$BitrateMethodDisplay - using profile bitrate" -ForegroundColor DarkGray
             }
-        } else {
-            Write-Host "[$CurrentFile/$($VideoFiles.Count)] $($File.Name) ($InputSizeMB MB) | Default ($VideoBitrate, $Preset)" -ForegroundColor Cyan
-            [System.IO.File]::AppendAllText($LogFile, "Processing: $($File.Name) - Input: $InputSizeMB MB - Using default parameters (Bitrate=$VideoBitrate, Preset=$Preset)`n", [System.Text.UTF8Encoding]::new($false))
+            Write-Host "  Settings: Bitrate=$VideoBitrate MaxRate=$MaxRate BufSize=$BufSize Preset=$Preset" -ForegroundColor Gray
+            [System.IO.File]::AppendAllText($LogFile, "Processing: $($File.Name) - $($Metadata.Resolution) @ $($Metadata.FPS)fps - Profile: $ProfileName - Input: $InputSizeMB MB`n", [System.Text.UTF8Encoding]::new($false))
+            [System.IO.File]::AppendAllText($LogFile, "  Source Bitrate: $(if ($SourceBitrate -gt 0) { "$SourceBitrateStr ($($Metadata.BitrateMethod))" } else { "unknown" })`n", [System.Text.UTF8Encoding]::new($false))
+            [System.IO.File]::AppendAllText($LogFile, "  Settings: Bitrate=$VideoBitrate, MaxRate=$MaxRate, BufSize=$BufSize, Preset=$Preset`n", [System.Text.UTF8Encoding]::new($false))
         }
     } else {
-        Write-Host "[$CurrentFile/$($VideoFiles.Count)] $($File.Name) ($InputSizeMB MB) | Default ($VideoBitrate, $Preset)" -ForegroundColor Cyan
+        # Fallback to default parameters if metadata detection fails
+        $VideoBitrate = $DefaultVideoBitrate
+        $MaxRate = $DefaultMaxRate
+        $BufSize = $DefaultBufSize
+        Write-Host "[$CurrentFile/$($VideoFiles.Count)] $($File.Name) ($InputSizeMB MB) | Using defaults ($VideoBitrate, $Preset)" -ForegroundColor Cyan
         [System.IO.File]::AppendAllText($LogFile, "Processing: $($File.Name) - Input: $InputSizeMB MB - Using default parameters (Bitrate=$VideoBitrate, Preset=$Preset)`n", [System.Text.UTF8Encoding]::new($false))
     }
 
@@ -264,6 +259,7 @@ foreach ($File in $VideoFiles) {
     if ($PreserveAudio) {
         $AudioCodecToUse = "copy"
         $AudioBitrate = $null
+        $AudioSampleRate = $null
 
         # Detect actual audio codec from source file using ffprobe
         try {
@@ -290,8 +286,9 @@ foreach ($File in $VideoFiles) {
             if (-not $AudioCodecToUse) {
                 $AudioCodecToUse = "aac"  # AAC is universally compatible
             }
-            $AudioBitrate = $DefaultAudioBitrate
-            [System.IO.File]::AppendAllText($LogFile, "  Audio: Re-encoding $($SourceAudioCodec.ToUpper()) (incompatible with $($FileExtension.ToUpper())) -> $AudioCodecToUse @ $DefaultAudioBitrate`n", [System.Text.UTF8Encoding]::new($false))
+            $AudioBitrate = "${SelectedAACBitrate}k"
+            $AudioSampleRate = Get-AACSampleRate -InputPath $InputPath
+            [System.IO.File]::AppendAllText($LogFile, "  Audio: Re-encoding $($SourceAudioCodec.ToUpper()) (incompatible with $($FileExtension.ToUpper())) -> $AudioCodecToUse @ $AudioBitrate @ $($AudioSampleRate)Hz`n", [System.Text.UTF8Encoding]::new($false))
         }
     } else {
         $AudioCodecToUse = $AudioCodecMap[$AudioCodec.ToLower()]
@@ -300,7 +297,8 @@ foreach ($File in $VideoFiles) {
             [System.IO.File]::AppendAllText($LogFile, "  Warning: Invalid audio codec '$AudioCodec'. Using 'aac' as fallback.`n", [System.Text.UTF8Encoding]::new($false))
             $AudioCodecToUse = "aac"  # AAC for maximum compatibility
         }
-        $AudioBitrate = $DefaultAudioBitrate
+        $AudioBitrate = "${SelectedAACBitrate}k"
+        $AudioSampleRate = Get-AACSampleRate -InputPath $InputPath
     }
 
     # Build ffmpeg command
@@ -395,6 +393,11 @@ foreach ($File in $VideoFiles) {
     # Add audio bitrate only if re-encoding audio
     if ($AudioBitrate) {
         $FFmpegArgs += @("-b:a", $AudioBitrate)
+    }
+
+    # Add audio sample rate if specified
+    if ($AudioSampleRate) {
+        $FFmpegArgs += @("-ar", $AudioSampleRate)
     }
 
     # For AAC audio, add compatibility settings

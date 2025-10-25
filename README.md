@@ -41,9 +41,11 @@ A powerful batch video conversion tool with GPU acceleration, featuring an inter
    ```
 3. **Configure settings** in the GUI:
    - Select codec (AV1 or HEVC)
+   - Choose encoding preset (p1-p7)
    - Choose container format
+   - Adjust video bitrate multiplier
    - Configure audio encoding
-   - Adjust bitrate multiplier
+   - Adjust AAC bitrate (if re-encoding to AAC)
 4. **Click Start** and wait for conversion to complete
 5. **Find converted videos** in the `_output_files/` folder
 
@@ -56,6 +58,14 @@ When you run the script, a GUI window appears with the following options:
 #### Video Codec
 - **HEVC (H.265)**: Better compatibility, works on most modern GPUs
 - **AV1**: Best compression, smallest file sizes, requires RTX 40+ series
+
+#### Encoding Preset
+- Slider from **p1 (fastest) to p7 (slowest, best quality)**
+- **p1**: Fastest encoding, lower compression efficiency
+- **p4**: Balanced speed and quality
+- **p6-p7**: Slowest encoding, best compression and quality (recommended for final encodes)
+- Higher presets take longer but produce smaller files with better quality
+- This setting overrides the preset values in `$ParameterMap` from config.ps1
 
 #### Container Format
 - **Convert all to MP4**: Converts all videos to MP4 format (universal compatibility)
@@ -97,17 +107,24 @@ When you run the script, a GUI window appears with the following options:
 - Use **"Convert to MKV"** with **either codec** for maximum flexibility (supports all features like subtitles)
 - MP4 and MKV are the most flexible containers supporting both HEVC and AV1
 
-#### Audio Encoding
-- **Copy original audio**: Fastest, preserves original quality
-  - Automatically disabled when preserving original container
-  - Script auto-detects incompatible audio codecs (WMA, Vorbis, DTS) and re-encodes when needed
-- **Re-encode to AAC/Opus**: Universal compatibility, slightly slower
-
-#### Bitrate Multiplier
+#### Video Bitrate Multiplier
 - Slider from **0.1x to 3.0x**
 - Lower values = smaller files, lower quality
 - Higher values = larger files, higher quality
 - **1.0x** = use profile defaults
+- Applies to video encoding bitrates only
+
+#### Audio Encoding
+- **Copy original audio**: Fastest, preserves original quality
+  - Automatically disabled when preserving original container
+  - Script auto-detects incompatible audio codecs (WMA, Vorbis, DTS) and re-encodes when needed
+- **Re-encode to AAC**: Universal compatibility, slightly slower
+  - AAC bitrate slider appears when this option is selected
+  - Adjustable from **96 kbps to 320 kbps** (default: 256 kbps)
+  - Intelligent sampling rate handling:
+    - Preserves source sampling rate if within AAC's supported range (8-96 kHz)
+    - Automatically uses 48 kHz for sources higher than 48 kHz or unsupported rates
+    - Ensures optimal compatibility without quality loss
 
 ### Advanced Configuration (config.ps1)
 
@@ -121,9 +138,12 @@ $FileExtensions = @("*.mp4", "*.mov", "*.mkv", "*.wmv", "*.avi", "*.ts", "*.m2ts
 # Default Codec (can be changed in GUI)
 $OutputCodec = "AV1"               # "AV1" or "HEVC"
 
+# Encoding Preset (can be changed in GUI)
+$DefaultPreset = "p6"              # "p1" to "p7" (p1=fastest, p7=slowest/best)
+
 # Audio Settings
 $AudioCodec = "aac"                # "opus" or "aac"
-$DefaultAudioBitrate = "256k"
+$DefaultAudioBitrate = "256k"      # AAC bitrate (adjustable in GUI: 96k-320k)
 
 # Output Settings
 $OutputExtension = ".mp4"          # .mkv, .mp4, .webm, .mov, .ts, .wmv, .avi
@@ -139,19 +159,22 @@ $BitrateMultiplier = 1             # Override in GUI
 
 The script automatically selects encoding parameters based on video resolution and framerate:
 
-| Resolution | FPS Range | Video Bitrate | Preset | Profile Name |
-|------------|-----------|---------------|--------|--------------|
-| 8K (7680+) | 50-999 | 80M | p7 | 8K 60fps+ |
-| 8K (7680+) | 0-50 | 60M | p7 | 8K 30fps |
-| 4K (3840+) | 50-999 | 40M | p7 | 4K 60fps+ |
-| 4K (3840+) | 0-50 | 30M | p7 | 4K 30fps |
-| 2.7K (2560+) | 50-999 | 30M | p6 | 2.7K 60fps+ |
-| 2.7K (2560+) | 0-50 | 25M | p6 | 2.7K 30fps |
-| 1080p (1920+) | 50-999 | 25M | p6 | 1080p 50fps+ |
-| 1080p (1920+) | 0-50 | 15M | p6 | 1080p 30fps |
-| 720p (0+) | 0-999 | 10M | p5 | 720p or lower |
+| Resolution | FPS Range | Video Bitrate | Profile Name |
+|------------|-----------|---------------|--------------|
+| 8K (7680+) | 50-999 | 80M | 8K 60fps+ |
+| 8K (7680+) | 0-50 | 60M | 8K 30fps |
+| 4K (3840+) | 50-999 | 40M | 4K 60fps+ |
+| 4K (3840+) | 0-50 | 30M | 4K 30fps |
+| 2.7K (2560+) | 50-999 | 30M | 2.7K 60fps+ |
+| 2.7K (2560+) | 0-50 | 25M | 2.7K 30fps |
+| 1080p (1920+) | 50-999 | 25M | 1080p 50fps+ |
+| 1080p (1920+) | 0-50 | 15M | 1080p 30fps |
+| 720p (0+) | 0-999 | 10M | 720p or lower |
 
-All bitrates are adjusted by the **Bitrate Multiplier** you set in the GUI.
+**Note**:
+- All bitrates are adjusted by the **Video Bitrate Multiplier** you set in the GUI
+- The **Encoding Preset** (p1-p7) is now controlled by the GUI slider and applies to all videos
+- Preset values in `$ParameterMap` (config.ps1) are no longer used; the GUI setting takes precedence
 
 ## Directory Structure
 
@@ -215,13 +238,15 @@ Browse and view saved quality reports:
 ========================================
   CONVERSION SETTINGS
 ========================================
-  Codec: AV1
-  Container: Preserve original
-  Audio: Re-encode to AAC
-  Bitrate Multiplier: 1.0x
+  Files:               5 video(s) found
+  Output Video Codec:  AV1
+  Encoding Preset:     p6
+  Parameter Mode:      Dynamic
+  Bitrate Multiplier:  1.0x
+  Container:           Preserve original
+  Audio:               Re-encode to AAC @ 256kbps
+  Skip Mode:           Skip existing
 ========================================
-
-Converting 5 files | Codec: AV1 | Mode: Dynamic | Audio: AAC @ 256k | Container: Original | Files: Skip existing
 
 [1/5] vacation_2024.mp4 (850.5 MB)
   Resolution: 3840x2160 @ 60fps | Profile: 4K 60fps+
@@ -502,9 +527,10 @@ ffprobe -v error -select_streams v:0 -show_entries stream=width,height,r_frame_r
 
 1. **Use HEVC for older GPUs**: HEVC encoding is faster on GTX/RTX 20-30 series
 2. **Enable "Copy original audio"**: Saves processing time if audio quality is acceptable
-3. **Lower preset for speed**: Edit `config.ps1` and change `$DefaultPreset = "p4"` for faster encoding
+3. **Lower preset for speed**: Use the Encoding Preset slider in the GUI - set to p1-p4 for faster encoding (recommended: p4 for balanced speed/quality)
 4. **Monitor GPU usage**: Use `nvidia-smi -l 1` to verify GPU is being utilized
 5. **Batch similar videos**: Group videos by resolution for optimal parameter selection
+6. **Adjust AAC bitrate**: When re-encoding audio, lower AAC bitrate (128-192 kbps) can speed up encoding slightly
 
 ## Supported Formats
 
@@ -561,13 +587,16 @@ The script uses intelligent hardware acceleration with automatic fallback:
 
 **Audio Output**:
 - **AAC** - Maximum compatibility (MP4, MOV, M4V)
+  - Adjustable bitrate: 96-320 kbps (default: 256 kbps)
+  - Intelligent sampling rate: Preserves source rate (8-48 kHz) or uses 48 kHz for unsupported rates
 - **Opus** - Better quality at low bitrates (MKV, WebM)
 - **Copy** - Preserve original (fastest, but may have compatibility issues)
 
 **Audio Compatibility**:
-- The script uses ffprobe to detect actual audio codec (not just file extension)
+- The script uses ffprobe to detect actual audio codec and sampling rate (not just file extension)
 - Automatically re-encodes incompatible audio even when "Copy original audio" is selected
 - Example: WMA audio → AAC when converting WMV to MP4
+- AAC sampling rates: Preserves source if in supported range (8-96 kHz), uses 48 kHz for higher rates
 - Prevents "silent video" issues in web browsers and mobile devices
 
 **Container/Codec Compatibility**:

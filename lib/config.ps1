@@ -37,9 +37,11 @@ $OutputCodec = "AV1"  # Change to "AV1" or "HEVC"
 # VIDEO ENCODING SETTINGS
 # ============================================================================
 
-# Default FFmpeg Parameters (used when dynamic parameters are disabled)
-$DefaultHWAccel = "cuda"
-$DefaultPreset = "p6"
+# Default Encoding Preset (can be changed in GUI)
+# p1 = fastest, p7 = slowest with best compression and quality
+$DefaultPreset = "p7"
+
+# Fallback FFmpeg Parameters (used when video metadata detection fails)
 $DefaultVideoBitrate = "20M"
 $DefaultMaxRate = "30M"
 $DefaultBufSize = "40M"
@@ -67,42 +69,39 @@ $PreserveAudio = $true            # Set to $true to copy audio without re-encodi
 # DYNAMIC PARAMETER SETTINGS
 # ============================================================================
 
-# Enable/Disable dynamic parameters
-# Set to $true to enable resolution/FPS-based parameter adjustment
-$UseDynamicParameters = $true
-
 # Bitrate Modifier (multiplier for all bitrate values)
 # 1.0 = use values as-is, 1.1 = 10% increase, 1.5 = 50% increase, 0.8 = 20% decrease
 $BitrateMultiplier = 0.8
 
-# Parameter Mapping: Define bitrate and preset based on resolution and FPS ranges
+# Parameter Mapping: Define bitrate based on resolution and FPS ranges
+# Note: Preset is now controlled by the GUI slider and is no longer defined here
 $ParameterMap = @(
     # 8K 60fps
-    @{ ProfileName = "8K 60fps+"; ResolutionMin = 7680; FPSMin = 50; FPSMax = 999; VideoBitrate = "80M"; MaxRate = "120M"; BufSize = "160M"; Preset = "p7" },
+    @{ ProfileName = "8K 60fps+"; ResolutionMin = 7680; FPSMin = 50; FPSMax = 999; VideoBitrate = "80M"; MaxRate = "120M"; BufSize = "160M" },
 
     # 8K 30fps
-    @{ ProfileName = "8K 30fps"; ResolutionMin = 7680; FPSMin = 0; FPSMax = 50; VideoBitrate = "60M"; MaxRate = "90M"; BufSize = "120M"; Preset = "p7" },
+    @{ ProfileName = "8K 30fps"; ResolutionMin = 7680; FPSMin = 0; FPSMax = 50; VideoBitrate = "60M"; MaxRate = "90M"; BufSize = "120M" },
 
     # 4K 60fps
-    @{ ProfileName = "4K 60fps+"; ResolutionMin = 3840; FPSMin = 50; FPSMax = 999; VideoBitrate = "40M"; MaxRate = "60M"; BufSize = "80M"; Preset = "p7" },
+    @{ ProfileName = "4K 60fps+"; ResolutionMin = 3840; FPSMin = 50; FPSMax = 999; VideoBitrate = "40M"; MaxRate = "60M"; BufSize = "80M" },
 
     # 4K 30fps
-    @{ ProfileName = "4K 30fps"; ResolutionMin = 3840; FPSMin = 0; FPSMax = 50; VideoBitrate = "30M"; MaxRate = "45M"; BufSize = "60M"; Preset = "p7" },
+    @{ ProfileName = "4K 30fps"; ResolutionMin = 3840; FPSMin = 0; FPSMax = 50; VideoBitrate = "30M"; MaxRate = "45M"; BufSize = "60M" },
 
     # 2.7K/1440p 60fps
-    @{ ProfileName = "2.7K 60fps+"; ResolutionMin = 2560; FPSMin = 50; FPSMax = 999; VideoBitrate = "30M"; MaxRate = "45M"; BufSize = "60M"; Preset = "p7" },
+    @{ ProfileName = "2.7K 60fps+"; ResolutionMin = 2560; FPSMin = 50; FPSMax = 999; VideoBitrate = "30M"; MaxRate = "45M"; BufSize = "60M" },
 
     # 2.7K/1440p 30fps
-    @{ ProfileName = "2.7K 30fps"; ResolutionMin = 2560; FPSMin = 0; FPSMax = 50; VideoBitrate = "25M"; MaxRate = "40M"; BufSize = "50M"; Preset = "p7" },
+    @{ ProfileName = "2.7K 30fps"; ResolutionMin = 2560; FPSMin = 0; FPSMax = 50; VideoBitrate = "25M"; MaxRate = "40M"; BufSize = "50M" },
 
     # 1080p 80fps+
-    @{ ProfileName = "1080p 50fps+"; ResolutionMin = 1920; FPSMin = 50; FPSMax = 999; VideoBitrate = "25M"; MaxRate = "35M"; BufSize = "50M"; Preset = "p7" },
+    @{ ProfileName = "1080p 50fps+"; ResolutionMin = 1920; FPSMin = 50; FPSMax = 999; VideoBitrate = "25M"; MaxRate = "35M"; BufSize = "50M" },
 
     # 1080p 30fps
-    @{ ProfileName = "1080p 30fps"; ResolutionMin = 1920; FPSMin = 0; FPSMax = 50; VideoBitrate = "15M"; MaxRate = "25M"; BufSize = "35M"; Preset = "p7" },
+    @{ ProfileName = "1080p 30fps"; ResolutionMin = 1920; FPSMin = 0; FPSMax = 50; VideoBitrate = "15M"; MaxRate = "25M"; BufSize = "35M" },
 
     # 720p and below
-    @{ ProfileName = "720p or lower"; ResolutionMin = 0; FPSMin = 0; FPSMax = 999; VideoBitrate = "10M"; MaxRate = "18M"; BufSize = "24M"; Preset = "p7" }
+    @{ ProfileName = "720p or lower"; ResolutionMin = 0; FPSMin = 0; FPSMax = 999; VideoBitrate = "10M"; MaxRate = "18M"; BufSize = "24M" }
 )
 
 # ============================================================================
