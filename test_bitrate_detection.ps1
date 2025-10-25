@@ -6,17 +6,17 @@ function Get-VideoMetadata {
     param([string]$FilePath)
 
     try {
-        # Get resolution
-        $WidthOutput = & ffprobe -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 $FilePath 2>$null
-        $HeightOutput = & ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 $FilePath 2>$null
-        $FPSOutput = & ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of csv=p=0 $FilePath 2>$null
+        # Get resolution (TS/M2TS files may return multiple lines, so take first non-empty line)
+        $WidthOutput = (& ffprobe -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1).Trim().TrimEnd(',')
+        $HeightOutput = (& ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1).Trim().TrimEnd(',')
+        $FPSOutput = (& ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1).Trim().TrimEnd(',')
 
-        # Try to get bitrate from video stream first
-        $BitrateOutput = & ffprobe -v error -select_streams v:0 -show_entries stream=bit_rate -of csv=p=0 $FilePath 2>$null
+        # Try to get bitrate from video stream first (TS/M2TS files may return multiple lines)
+        $BitrateOutput = (& ffprobe -v error -select_streams v:0 -show_entries stream=bit_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1).Trim().TrimEnd(',')
 
-        # If stream bitrate is N/A, try format bitrate (common for MKV files)
-        if (-not $BitrateOutput -or $BitrateOutput -eq "N/A") {
-            $BitrateOutput = & ffprobe -v error -show_entries format=bit_rate -of csv=p=0 $FilePath 2>$null
+        # If stream bitrate is N/A or empty, try format bitrate (common for MKV, TS, M2TS files)
+        if (-not $BitrateOutput -or $BitrateOutput -eq "N/A" -or $BitrateOutput -eq "") {
+            $BitrateOutput = (& ffprobe -v error -show_entries format=bit_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1).Trim().TrimEnd(',')
         }
 
         $Width = [int]$WidthOutput
@@ -45,8 +45,8 @@ function Get-VideoMetadata {
         # If bitrate still not available, calculate from file size and duration
         if ($Bitrate -eq 0) {
             try {
-                # Get video duration in seconds
-                $DurationOutput = & ffprobe -v error -show_entries format=duration -of csv=p=0 $FilePath 2>$null
+                # Get video duration in seconds (handle potential multiple lines)
+                $DurationOutput = (& ffprobe -v error -show_entries format=duration -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1).Trim().TrimEnd(',')
                 $Duration = [double]$DurationOutput
 
                 # Get file size in bytes
@@ -115,7 +115,7 @@ $InputDir = ".\input_files"
 $VideoFiles = @()
 
 # Common video extensions
-$Extensions = @("*.mp4", "*.mov", "*.mkv", "*.ts", "*.m2ts", "*.m4v")
+$Extensions = @("*.mp4", "*.mov", "*.mkv", "*.ts", "*.m2ts", "*.m4v", "*.webm", "*.wmv")
 
 foreach ($Extension in $Extensions) {
     $VideoFiles += Get-ChildItem -Path $InputDir -Filter $Extension -File -ErrorAction SilentlyContinue

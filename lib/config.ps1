@@ -23,7 +23,7 @@ $LogDir = ".\logs"
 $SkipExistingFiles = $true        # Set to $true to skip existing output files (recommended), $false to reconvert everything
 
 # File Extensions to Process (comma-separated)
-$FileExtensions = @("*.mp4", "*.mov", "*.mkv", "*.ts", "*.m2ts", "*.m4v")
+$FileExtensions = @("*.mp4", "*.mov", "*.mkv", "*.ts", "*.m2ts", "*.m4v", "*.webm", "*.wmv")
 
 # ============================================================================
 # CODEC SELECTION
