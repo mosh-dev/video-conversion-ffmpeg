@@ -389,30 +389,32 @@ $reportData = @()
 $comparisons = 0
 $currentComparison = 0
 
-# Match input files with output files
+# Match output files with input files (iterate through output files)
 $matchedPairs = @()
 
-foreach ($inputFile in $inputFiles) {
-    $baseName = Get-BaseFileName -FilePath $inputFile.FullName
+foreach ($outputFile in $outputFiles) {
+    $baseName = Get-BaseFileName -FilePath $outputFile.FullName
 
-    # Try to find matching output file
-    $matchedOutput = $null
+    # Try to find matching input/source file
+    $matchedSource = $null
 
-    foreach ($outputFile in $outputFiles) {
-        $outputBaseName = Get-BaseFileName -FilePath $outputFile.FullName
+    foreach ($inputFile in $inputFiles) {
+        $inputBaseName = Get-BaseFileName -FilePath $inputFile.FullName
 
-        if ($baseName -eq $outputBaseName) {
-            $matchedOutput = $outputFile
+        if ($baseName -eq $inputBaseName) {
+            $matchedSource = $inputFile
             break
         }
     }
 
-    if ($matchedOutput) {
+    if ($matchedSource) {
         $matchedPairs += @{
-            Source = $inputFile
-            Encoded = $matchedOutput
+            Source = $matchedSource
+            Encoded = $outputFile
             BaseName = $baseName
         }
+    } else {
+        Write-Host "Warning: No source file found for output file: $($outputFile.Name)" -ForegroundColor Yellow
     }
 }
 
