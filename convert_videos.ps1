@@ -121,8 +121,29 @@ foreach ($File in $VideoFiles) {
 
     # Determine output extension (preserve original container if enabled)
     $FileExtension = if ($PreserveContainer) { $File.Extension } else { $OutputExtension }
-    $OutputFileName = [System.IO.Path]::GetFileNameWithoutExtension($File.Name) + $FileExtension
+    $BaseFileName = [System.IO.Path]::GetFileNameWithoutExtension($File.Name)
+
+    # Check if changing container format would cause a filename collision
+    # (e.g., video.ts and video.m2ts both converting to video.mp4)
+    $OutputFileName = $BaseFileName + $FileExtension
     $OutputPath = Join-Path $OutputDir $OutputFileName
+
+    # If output already exists and we're converting format, check if it's from a different source file
+    if (-not $PreserveContainer -and (Test-Path -LiteralPath $OutputPath)) {
+        # Check if there's another input file with the same base name but different extension
+        $SameBaseNameFiles = $VideoFiles | Where-Object {
+            [System.IO.Path]::GetFileNameWithoutExtension($_.Name) -eq $BaseFileName -and
+            $_.FullName -ne $InputPath
+        }
+
+        if ($SameBaseNameFiles.Count -gt 0) {
+            # Collision detected - add original extension to output filename for uniqueness
+            $OriginalExtension = $File.Extension.TrimStart('.').ToLower()
+            $OutputFileName = "${BaseFileName}_${OriginalExtension}${FileExtension}"
+            $OutputPath = Join-Path $OutputDir $OutputFileName
+            Write-Host "  Note: Filename collision detected - output renamed to: $OutputFileName" -ForegroundColor DarkGray
+        }
+    }
 
     # Temporary output path during conversion
     $TempOutputPath = $OutputPath + ".tmp"
@@ -196,40 +217,69 @@ foreach ($File in $VideoFiles) {
     if ($PreserveAudio) {
         $AudioCodecToUse = "copy"
         $AudioBitrate = $null
+
+        # Check for incompatible audio codec/container combinations
+        # MP4/M4V/MOV containers don't support: WMAPro, Vorbis, DTS, PCM variants, etc.
+        # If PreserveContainer is disabled and output is MP4/M4V/MOV, we need to check source audio
+        if ($FileExtension.ToLower() -match "\.(mp4|m4v|mov)$") {
+            $IncompatibleSourceFormats = @(".wmv", ".avi", ".mkv", ".webm", ".flv")
+            if ($IncompatibleSourceFormats -contains $SourceExtension) {
+                # Force audio re-encoding for potentially incompatible sources
+                Write-Host "  Note: Re-encoding audio (source audio codec may not be compatible with $($FileExtension.ToUpper()) container)" -ForegroundColor Yellow
+                $AudioCodecToUse = $AudioCodecMap[$AudioCodec.ToLower()]
+                if (-not $AudioCodecToUse) {
+                    $AudioCodecToUse = "aac"  # AAC is universally compatible with MP4
+                }
+                $AudioBitrate = $DefaultAudioBitrate
+            }
+        }
     } else {
         $AudioCodecToUse = $AudioCodecMap[$AudioCodec.ToLower()]
         if (-not $AudioCodecToUse) {
-            Write-Host "  Warning: Invalid audio codec '$AudioCodec'. Using 'libopus' as fallback." -ForegroundColor Yellow
-            $AudioCodecToUse = "libopus"
+            Write-Host "  Warning: Invalid audio codec '$AudioCodec'. Using 'aac' as fallback." -ForegroundColor Yellow
+            $AudioCodecToUse = "aac"  # Changed from libopus to aac for better compatibility
         }
         $AudioBitrate = $DefaultAudioBitrate
     }
 
     # Build ffmpeg command
-    # Determine if we can use CUDA hardware acceleration based on input codec
-    # WMV (wmv3), old MPEG formats, and some others don't support CUDA decoding
-    $UseCUDA = $true
+    # Hardware acceleration priority: CUDA (NVDEC) > D3D11VA > Software
+    # NVDEC supports: H.264, HEVC, VP8, VP9, AV1, MPEG-1/2/4, VC-1 (WMV), MJPEG
+    # D3D11VA supports: H.264, HEVC, VP9, VC-1, MPEG-2 (Windows-native, works on all GPUs)
+
+    $HWAccelMethod = "cuda"  # Default to CUDA (NVDEC)
     $SourceExtension = $File.Extension.ToLower()
 
-    # Disable CUDA for formats that don't support it
-    if ($SourceExtension -match "\.(wmv|avi|flv)$") {
-        $UseCUDA = $false
+    # For problematic formats, try D3D11VA instead of CUDA
+    # (mainly for very old codecs or corrupted files that NVDEC might reject)
+    if ($SourceExtension -match "\.(flv|3gp|divx)$") {
+        $HWAccelMethod = "d3d11va"
     }
 
-    # Build input arguments
-    if ($UseCUDA) {
-        # Use CUDA hardware acceleration for supported formats
+    # Build input arguments with hardware acceleration
+    if ($HWAccelMethod -eq "cuda") {
+        # NVIDIA NVDEC: Fastest, supports most codecs including VC-1 (WMV)
         $FFmpegArgs = @(
             "-hwaccel", "cuda",
             "-hwaccel_output_format", "cuda",
             "-i", $InputPath
         )
+        $UseCUDA = $true
+    } elseif ($HWAccelMethod -eq "d3d11va") {
+        # D3D11VA: Windows-native, works on NVIDIA/AMD/Intel GPUs
+        Write-Host "  Note: Using D3D11VA hardware decoding" -ForegroundColor DarkGray
+        $FFmpegArgs = @(
+            "-hwaccel", "d3d11va",
+            "-i", $InputPath
+        )
+        $UseCUDA = $false
     } else {
-        # Software decoding for unsupported formats
-        Write-Host "  Note: Using software decoding (format doesn't support CUDA acceleration)" -ForegroundColor DarkGray
+        # Software decoding fallback (should rarely be needed)
+        Write-Host "  Note: Using software decoding" -ForegroundColor DarkGray
         $FFmpegArgs = @(
             "-i", $InputPath
         )
+        $UseCUDA = $false
     }
 
     # For MKV files, add specific stream mapping
