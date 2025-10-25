@@ -344,23 +344,21 @@ foreach ($File in $VideoFiles) {
         "-multipass", $DefaultMultipass
     )
 
-    # Add codec-specific compatibility flags for VLC and other players
+    # Add encoder-specific flags for NVENC codecs
     if ($DefaultVideoCodec -eq "av1_nvenc" -or $DefaultVideoCodec -eq "hevc_nvenc") {
-        # Common flags for both AV1 and HEVC
         $FFmpegArgs += @(
             "-tune:v", "hq",
             "-rc:v", "vbr",
             "-tier:v", "0"
         )
+    }
 
-        # Only add movflags for MP4/MOV containers
-        if ($FileExtension.ToLower() -match "\.(mp4|m4v|mov)$") {
-            if ($DefaultVideoCodec -eq "av1_nvenc") {
-                $FFmpegArgs += @("-movflags", "+faststart+write_colr")
-            } else {
-                # hevc_nvenc
-                $FFmpegArgs += @("-movflags", "+faststart")
-            }
+    # Add container-specific flags for MP4/MOV containers
+    if ($FileExtension.ToLower() -match "\.(mp4|m4v|mov)$") {
+        if ($DefaultVideoCodec -eq "av1_nvenc") {
+            $FFmpegArgs += @("-movflags", "+faststart+write_colr")
+        } elseif ($DefaultVideoCodec -eq "hevc_nvenc") {
+            $FFmpegArgs += @("-movflags", "+faststart")
         }
     }
 
