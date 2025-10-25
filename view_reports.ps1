@@ -21,7 +21,14 @@ function Show-FormattedReport {
     param([string]$JsonPath)
 
     # Read JSON file
-    $reportData = Get-Content -Path $JsonPath -Encoding UTF8 -Raw | ConvertFrom-Json
+    $reportDataRaw = Get-Content -Path $JsonPath -Encoding UTF8 -Raw | ConvertFrom-Json
+
+    # Ensure reportData is always an array (handle single object or array)
+    if ($reportDataRaw -is [array]) {
+        $reportData = $reportDataRaw
+    } else {
+        $reportData = @($reportDataRaw)
+    }
 
     if ($reportData.Count -eq 0) {
         Write-Host "`nNo data found in report." -ForegroundColor Yellow
@@ -139,8 +146,97 @@ $jsonFiles = Get-ChildItem -Path $ReportDir -Filter "*.json" -File -ErrorAction 
              Sort-Object LastWriteTime -Descending
 
 if ($jsonFiles.Count -eq 0) {
-    Write-Host "No JSON reports found in $ReportDir" -ForegroundColor Yellow
+    Write-Host "No data in the reports folder." -ForegroundColor Red
     Write-Host "Run analyze_quality.ps1 first to generate reports.`n" -ForegroundColor Yellow
+    Write-Host "Press any key to exit..." -ForegroundColor Yellow
+    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    exit 0
+}
+
+# If only one report exists, automatically open it
+if ($jsonFiles.Count -eq 1) {
+    Write-Host "Found 1 report. Opening automatically...`n" -ForegroundColor Green
+    $selectedFile = $jsonFiles[0]
+    Show-FormattedReport -JsonPath $selectedFile.FullName
+
+    # Option to export
+    Write-Host ""
+    Write-Host "Options:" -ForegroundColor Yellow
+    Write-Host "  [E] Export to text file" -ForegroundColor White
+    Write-Host "  [Q] Quit" -ForegroundColor White
+    Write-Host ""
+
+    $action = $null
+    while ($true) {
+        Write-Host "Select an option [E/Q]: " -NoNewline -ForegroundColor Yellow
+        $action = Read-Host
+
+        if ($action -eq 'Q' -or $action -eq 'q') {
+            Write-Host "`nExiting...`n" -ForegroundColor Gray
+            exit 0
+        } elseif ($action -eq 'E' -or $action -eq 'e') {
+            # Export to text file
+            $reportDataRaw = Get-Content -Path $selectedFile.FullName -Encoding UTF8 -Raw | ConvertFrom-Json
+
+            # Ensure reportData is always an array (handle single object or array)
+            if ($reportDataRaw -is [array]) {
+                $reportData = $reportDataRaw
+            } else {
+                $reportData = @($reportDataRaw)
+            }
+
+            $exportPath = Join-Path $ReportDir "$([System.IO.Path]::GetFileNameWithoutExtension($selectedFile.Name)).txt"
+
+            # Redirect output to file
+            $originalOut = [Console]::Out
+            $fileWriter = New-Object System.IO.StreamWriter($exportPath, $false, [System.Text.UTF8Encoding]::new($false))
+            [Console]::SetOut($fileWriter)
+
+            # Generate formatted output (without colors)
+            Write-Output "========================================="
+            Write-Output "  QUALITY COMPARISON REPORT"
+            Write-Output "========================================="
+            Write-Output "Report: $($selectedFile.Name)"
+            Write-Output ""
+
+            $fileNumber = 0
+            foreach ($row in $reportData) {
+                $fileNumber++
+                Write-Output "[$fileNumber/$($reportData.Count)] $($row.FileName)"
+                Write-Output "  Source:  $($row.SourceFile) ($($row.SourceSizeMB) MB)"
+                Write-Output "  Encoded: $($row.EncodedFile) ($($row.EncodedSizeMB) MB)"
+                Write-Output "  Compression: $($row.CompressionRatio)x ($($row.SpaceSavedPercent)% saved)"
+                Write-Output "  Resolution: $($row.SourceResolution) -> $($row.EncodedResolution)"
+                Write-Output "  Bitrate: $($row.SourceBitrateMbps) Mbps -> $($row.EncodedBitrateMbps) Mbps"
+                Write-Output "  Duration: $($row.DurationSeconds)s | Analysis Time: $($row.AnalysisTimeSeconds)s"
+                Write-Output ""
+                Write-Output "  Quality Metrics:"
+                Write-Output "    VMAF: $($row.VMAF) / 100"
+                Write-Output "    SSIM: $($row.SSIM) / 1.00"
+                Write-Output "    PSNR: $($row.PSNR) dB"
+                Write-Output "  Assessment: $($row.QualityAssessment)"
+                Write-Output ""
+                if ($fileNumber -lt $reportData.Count) {
+                    Write-Output "----------------------------------------"
+                    Write-Output ""
+                }
+            }
+
+            # Restore console output
+            $fileWriter.Close()
+            [Console]::SetOut($originalOut)
+
+            Write-Host "`nReport exported to: $exportPath" -ForegroundColor Green
+            Write-Host ""
+            break
+        } else {
+            Write-Host "Invalid option. Please enter E or Q.`n" -ForegroundColor Red
+        }
+    }
+
+    # Keep terminal open
+    Write-Host "Press any key to exit..." -ForegroundColor Yellow
+    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
     exit 0
 }
 
@@ -207,7 +303,15 @@ while ($true) {
         exit 0
     } elseif ($action -eq 'E' -or $action -eq 'e') {
         # Export to text file
-        $reportData = Get-Content -Path $selectedFile.FullName -Encoding UTF8 -Raw | ConvertFrom-Json
+        $reportDataRaw = Get-Content -Path $selectedFile.FullName -Encoding UTF8 -Raw | ConvertFrom-Json
+
+        # Ensure reportData is always an array (handle single object or array)
+        if ($reportDataRaw -is [array]) {
+            $reportData = $reportDataRaw
+        } else {
+            $reportData = @($reportDataRaw)
+        }
+
         $exportPath = Join-Path $ReportDir "$([System.IO.Path]::GetFileNameWithoutExtension($selectedFile.Name)).txt"
 
         # Redirect output to file

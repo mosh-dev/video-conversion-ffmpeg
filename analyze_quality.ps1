@@ -543,8 +543,9 @@ foreach ($pair in $matchedPairs) {
 # ============================================================================
 
 if ($reportData.Count -gt 0) {
-    # Export to JSON
-    $reportData | ConvertTo-Json -Depth 10 | Out-File -FilePath $ReportFile -Encoding UTF8
+    # Export to JSON (force array output even for single item)
+    # Wrap in @() to ensure array output in PowerShell 5.1
+    @($reportData) | ConvertTo-Json -Depth 10 | Out-File -FilePath $ReportFile -Encoding UTF8
 
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "  SUMMARY" -ForegroundColor Cyan
