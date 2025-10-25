@@ -438,7 +438,7 @@ function Show-ConversionUI {
                             FontSize="13"
                             Padding="12,10"
                             Margin="0,0,0,24">
-                            <ComboBoxItem Content="Preserve original (mkv → mkv, mp4 → mp4)"/>
+                            <ComboBoxItem Content="Preserve original"/>
                             <ComboBoxItem Content="Convert all to $OutputExtension"/>
                         </ComboBox>
 

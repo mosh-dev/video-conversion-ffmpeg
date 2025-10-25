@@ -49,17 +49,6 @@ $PreserveContainer = $uiResult.PreserveContainer
 $PreserveAudio = $uiResult.PreserveAudio
 $BitrateMultiplier = $uiResult.BitrateMultiplier
 
-Write-Host "`n========================================" -ForegroundColor Cyan
-Write-Host "  CONVERSION SETTINGS" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  Codec: $OutputCodec" -ForegroundColor White
-Write-Host "  Container: " -NoNewline -ForegroundColor White
-Write-Host $(if ($PreserveContainer) { "Preserve original" } else { "Convert to $OutputExtension" }) -ForegroundColor White
-Write-Host "  Audio: " -NoNewline -ForegroundColor White
-Write-Host $(if ($PreserveAudio) { "Copy original" } else { "Re-encode to $($AudioCodec.ToUpper())" }) -ForegroundColor White
-Write-Host "  Bitrate Modifier: $($BitrateMultiplier.ToString('0.0'))x" -ForegroundColor White
-Write-Host "========================================`n" -ForegroundColor Cyan
-
 # Generate timestamped log filename
 $Timestamp = $StartTime.ToString("yyyy-MM-dd_HH-mm-ss")
 $LogFile = Join-Path $LogDir "conversion_$Timestamp.txt"
@@ -100,12 +89,23 @@ if ($VideoFiles.Count -eq 0) {
     exit
 }
 
-# Display configuration
+# Display comprehensive conversion configuration
 $ModeStr = if ($UseDynamicParameters) { "Dynamic" } else { "Default" }
-$AudioDisplay = if ($PreserveAudio) { "Copy (Original)" } else { "$($AudioCodec.ToUpper()) @ $DefaultAudioBitrate" }
-$ContainerDisplay = if ($PreserveContainer) { "Original" } else { $OutputExtension }
+$AudioDisplay = if ($PreserveAudio) { "Copy original" } else { "Re-encode to $($AudioCodec.ToUpper()) @ $DefaultAudioBitrate" }
+$ContainerDisplay = if ($PreserveContainer) { "Preserve original" } else { "Convert to $OutputExtension" }
 $SkipModeDisplay = if ($SkipExistingFiles) { "Skip existing" } else { "Overwrite all" }
-Write-Host "`nConverting $($VideoFiles.Count) files | Codec: $OutputCodec | Mode: $ModeStr | Audio: $AudioDisplay | Container: $ContainerDisplay | Files: $SkipModeDisplay`n" -ForegroundColor Cyan
+
+Write-Host "`n========================================" -ForegroundColor Cyan
+Write-Host "  CONVERSION SETTINGS" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "  Files:               $($VideoFiles.Count) video(s) found" -ForegroundColor White
+Write-Host "  Output Video Codec:  $OutputCodec" -ForegroundColor White
+Write-Host "  Parameter Mode:      $ModeStr" -ForegroundColor White
+Write-Host "  Bitrate Multiplier:  $($BitrateMultiplier.ToString('0.0'))x" -ForegroundColor White
+Write-Host "  Container:           $ContainerDisplay" -ForegroundColor White
+Write-Host "  Audio:               $AudioDisplay" -ForegroundColor White
+Write-Host "  Skip Mode:           $SkipModeDisplay" -ForegroundColor White
+Write-Host "========================================`n" -ForegroundColor Cyan
 
 [System.IO.File]::AppendAllText($LogFile, "Found $($VideoFiles.Count) video file(s) to process`n`n", [System.Text.UTF8Encoding]::new($false))
 
