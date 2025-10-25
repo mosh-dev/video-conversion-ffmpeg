@@ -130,7 +130,7 @@ Write-Host "========================================`n" -ForegroundColor Cyan
 # Check if reports directory exists
 if (-not (Test-Path $ReportDir)) {
     Write-Host "Reports directory not found: $ReportDir" -ForegroundColor Red
-    Write-Host "Run compare_quality.ps1 first to generate reports.`n" -ForegroundColor Yellow
+    Write-Host "Run analyze_quality.ps1 first to generate reports.`n" -ForegroundColor Yellow
     exit 1
 }
 
@@ -140,7 +140,7 @@ $jsonFiles = Get-ChildItem -Path $ReportDir -Filter "*.json" -File -ErrorAction 
 
 if ($jsonFiles.Count -eq 0) {
     Write-Host "No JSON reports found in $ReportDir" -ForegroundColor Yellow
-    Write-Host "Run compare_quality.ps1 first to generate reports.`n" -ForegroundColor Yellow
+    Write-Host "Run analyze_quality.ps1 first to generate reports.`n" -ForegroundColor Yellow
     exit 0
 }
 

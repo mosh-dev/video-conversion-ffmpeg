@@ -212,50 +212,14 @@ function Compare-VideoQuality {
 
     try {
         $startTime = Get-Date
-        Write-Host "VMAF: " -NoNewline -ForegroundColor Cyan
+        Write-Host "  VMAF: " -NoNewline -ForegroundColor Cyan
 
-        # Calculate total frames for progress tracking
-        $totalFrames = [int]([math]::Ceiling($Duration * $sourceInfo.FPS))
+        Write-Host "Analyzing..." -NoNewline -ForegroundColor Yellow
 
-        # Run ffmpeg for VMAF with real-time progress
-        $vmafOutput = ""
-        $process = Start-Process -FilePath "ffmpeg" -ArgumentList $ffmpegArgs -NoNewWindow -PassThru -RedirectStandardError "temp_vmaf_$$.txt"
+        # Run ffmpeg directly, capturing stderr for parsing
+        $vmafOutput = & ffmpeg @ffmpegArgs 2>&1 | Out-String
 
-        # Monitor progress in real-time
-        $lastProgress = -1
-        while (-not $process.HasExited) {
-            Start-Sleep -Milliseconds 500
-
-            if (Test-Path "temp_vmaf_$$.txt") {
-                $output = Get-Content "temp_vmaf_$$.txt" -Tail 5 -ErrorAction SilentlyContinue
-
-                # Parse current frame from ffmpeg output (format: "frame= 1234 fps=...")
-                foreach ($line in $output) {
-                    if ($line -match "frame=\s*(\d+)") {
-                        $currentFrame = [int]$Matches[1]
-                        if ($totalFrames -gt 0) {
-                            $progress = [math]::Min(99, [int](($currentFrame / $totalFrames) * 100))
-
-                            # Only update if progress changed
-                            if ($progress -ne $lastProgress) {
-                                # Clear previous progress and write new
-                                Write-Host "`rVMAF: $progress% " -NoNewline -ForegroundColor Cyan
-                                $lastProgress = $progress
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        # Wait for process to complete
-        $process.WaitForExit()
-
-        # Read full output
-        $vmafOutput = Get-Content "temp_vmaf_$$.txt" -Raw -ErrorAction SilentlyContinue
-        Remove-Item "temp_vmaf_$$.txt" -Force -ErrorAction SilentlyContinue
-
-        Write-Host "`rVMAF: 100% - Done" -ForegroundColor Green
+        Write-Host "`rVMAF: Done        " -ForegroundColor Green
 
         # Parse VMAF score
         $vmaf = $null
@@ -263,8 +227,9 @@ function Compare-VideoQuality {
             $vmaf = [math]::Round([double]$Matches[1], 2)
         }
 
-        # Now run SSIM calculation
+        # Now run SSIM calculation with simple approach (working but no progress tracking)
         Write-Host "  SSIM: " -NoNewline -ForegroundColor Cyan
+
         $ssimFilter = if ($scalingNeeded) {
             "[0:v]scale=$($encodedInfo.Width):$($encodedInfo.Height):flags=bicubic[ref];[ref][1:v]ssim"
         } else {
@@ -278,17 +243,23 @@ function Compare-VideoQuality {
             "-f", "null",
             "-"
         )
-        $ssimOutput = & ffmpeg @ssimArgs 2>&1 | Out-String
-        Write-Host "Done" -ForegroundColor Green
 
-        # Parse SSIM
+        Write-Host "Analyzing..." -NoNewline -ForegroundColor Yellow
+
+        # Run ffmpeg directly like the original script does, capturing stderr for parsing
+        $ssimOutput = & ffmpeg @ssimArgs 2>&1 | Out-String
+
+        Write-Host "`rSSIM: Done        " -ForegroundColor Green
+
+        # Parse SSIM - ensure the regex captures the right value
         $ssim = $null
-        if ($ssimOutput -match "All:([\d.]+)") {
+        if ($ssimOutput -match "All:\s*([\d.]+)") {
             $ssim = [math]::Round([double]$Matches[1], 4)
         }
 
-        # Now run PSNR calculation
+        # Now run PSNR calculation with simple approach
         Write-Host "  PSNR: " -NoNewline -ForegroundColor Cyan
+
         $psnrFilter = if ($scalingNeeded) {
             "[0:v]scale=$($encodedInfo.Width):$($encodedInfo.Height):flags=bicubic[ref];[ref][1:v]psnr"
         } else {
@@ -302,8 +273,19 @@ function Compare-VideoQuality {
             "-f", "null",
             "-"
         )
+
+        Write-Host "Analyzing..." -NoNewline -ForegroundColor Yellow
+
+        # Run ffmpeg directly like the original script does, capturing stderr for parsing
         $psnrOutput = & ffmpeg @psnrArgs 2>&1 | Out-String
-        Write-Host "Done" -ForegroundColor Green
+
+        Write-Host "`rPSNR: Done        " -ForegroundColor Green
+
+        # Parse PSNR - ensure the regex captures the right value
+        $psnr = $null
+        if ($psnrOutput -match "average:\s*([\d.]+)") {
+            $psnr = [math]::Round([double]$Matches[1], 2)
+        }
 
         # Parse PSNR
         $psnr = $null

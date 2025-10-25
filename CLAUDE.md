@@ -11,8 +11,8 @@ This is a video conversion workspace for batch converting video files from vario
 The codebase is organized into modular components:
 
 - **`convert_videos.ps1`** - Main conversion script orchestrating the entire process
-- **`compare_quality.ps1`** - Quality validation tool using VMAF/SSIM/PSNR metrics
-- **`view_reports.ps1`** - Interactive report viewer for browsing and displaying CSV quality reports
+- **`analyze_quality.ps1`** - Quality validation tool using VMAF/SSIM/PSNR metrics
+- **`view_reports.ps1`** - Interactive report viewer for browsing and displaying JSON quality reports
 - **`lib/config.ps1`** - Centralized configuration file with all user-modifiable parameters
 - **`lib/conversion_helpers.ps1`** - Helper functions for metadata detection, parameter selection, and bitrate calculation
 - **`lib/show_conversion_ui.ps1`** - Modern Windows 11-style GUI for interactive parameter selection
@@ -70,13 +70,13 @@ The script launches an interactive GUI where users can configure:
 
 Default values are loaded from `config.ps1` and can be adjusted before starting conversion.
 
-## Quality Comparison Tool
+## Quality Validation Tool
 
 ```powershell
-.\compare_quality.ps1
+.\analyze_quality.ps1
 ```
 
-The quality comparison script validates re-encoded video quality using industry-standard metrics:
+The quality validation script validates re-encoded video quality using industry-standard metrics:
 
 **Metrics Used:**
 - **VMAF** (Video Multimethod Assessment Fusion) - Netflix's perceptual quality metric (0-100 scale)
@@ -87,7 +87,7 @@ The quality comparison script validates re-encoded video quality using industry-
 - Automatic file matching between `input_files/` and `output_files/` directories
 - Handles container format changes and collision-renamed files
 - Color-coded console output based on quality thresholds
-- CSV report generation in `reports/` directory
+- JSON report generation in `reports/` directory
 - Comprehensive statistics: compression ratio, bitrate comparison, quality distribution
 
 **Quality Thresholds:**
@@ -113,19 +113,19 @@ The quality comparison script validates re-encoded video quality using industry-
 .\view_reports.ps1
 ```
 
-Interactive CSV report viewer for browsing and displaying quality comparison results:
+Interactive JSON report viewer for browsing and displaying quality validation results:
 
 **Features:**
-- Lists all CSV reports from `reports/` directory sorted by date (newest first)
+- Lists all JSON reports from `reports/` directory sorted by date (newest first)
 - Displays formatted quality metrics with color-coded assessment
 - Shows summary statistics and quality distribution
 - Export formatted report to plain text file
 - Navigate between multiple reports in one session
 
 **Use Cases:**
-- Quick review of past quality comparisons
+- Quick review of past quality validations
 - Compare results across different encoding settings
-- Share formatted reports without opening CSV in Excel
+- Share formatted reports without external tools
 - Archive quality metrics in human-readable format
 
 ## Configuration (lib/config.ps1)
@@ -294,15 +294,15 @@ The script handles a wide variety of video formats through the `$FileExtensions`
 ## Script Behavior Notes
 
 **Ctrl+C Handling:**
-- Both `convert_videos.ps1` and `compare_quality.ps1` use standard PowerShell behavior (no custom handlers)
+- Both `convert_videos.ps1` and `analyze_quality.ps1` use standard PowerShell behavior (no custom handlers)
 - Press Ctrl+C once to immediately terminate the script
-- Any in-progress conversion/comparison will be interrupted
+- Any in-progress conversion/quality analysis will be interrupted
 - Temporary .tmp files are automatically cleaned up on next conversion run
 
 **Error Handling:**
 - `$ErrorActionPreference = "Continue"` allows processing to continue after errors
 - Individual file failures don't stop batch processing
-- All errors are logged to timestamped log file (conversion) or displayed on console (comparison)
+- All errors are logged to timestamped log file (conversion) or displayed on console (quality validation)
 - Exit codes: 0 = success, 1 = user cancellation or error
 
 ## Directory Structure
@@ -312,13 +312,13 @@ VideoConversion/
 ├── input_files/          # Source videos for conversion
 ├── output_files/         # Re-encoded videos
 ├── logs/                 # Conversion logs (timestamped)
-├── reports/              # Quality comparison reports (CSV)
+├── reports/              # Quality validation reports (JSON)
 ├── lib/
 │   ├── config.ps1        # User configuration
 │   ├── conversion_helpers.ps1   # Helper functions
 │   └── show_conversion_ui.ps1   # GUI interface
 ├── convert_videos.ps1    # Main conversion script
-├── compare_quality.ps1   # Quality validation tool
+├── analyze_quality.ps1   # Quality validation tool
 ├── view_reports.ps1      # Quality report viewer
 ├── CLAUDE.md             # This file
 └── README.md             # User documentation

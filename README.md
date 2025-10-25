@@ -122,13 +122,13 @@ VideoConversion/
 ├── input_files/          # Place source videos here
 ├── output_files/         # Converted videos appear here
 ├── logs/                 # Timestamped conversion logs
-├── reports/              # Quality comparison reports (CSV)
+├── reports/              # Quality validation reports (JSON)
 ├── lib/
 │   ├── config.ps1        # Configuration file
 │   ├── conversion_helpers.ps1   # Helper functions
 │   └── show_conversion_ui.ps1   # GUI interface
 ├── convert_videos.ps1    # Main conversion script
-├── compare_quality.ps1   # Quality comparison tool
+├── analyze_quality.ps1   # Quality validation tool
 ├── view_reports.ps1      # Quality report viewer
 └── README.md             # This file
 ```
@@ -157,12 +157,12 @@ VideoConversion/
 5. Choose **Copy original audio**
 6. Click Start
 
-### Example 4: Quality Comparison
+### Example 4: Quality Validation
 After converting videos, verify the quality:
-1. Run `.\compare_quality.ps1`
+1. Run `.\analyze_quality.ps1`
 2. Script automatically matches source and encoded files
 3. VMAF/SSIM/PSNR metrics are calculated for each pair
-4. View results in console and CSV report in `reports/`
+4. View results in console and JSON report in `reports/`
 
 ### Example 5: View Quality Reports
 Browse and view saved quality reports:
@@ -214,14 +214,14 @@ Each conversion run creates a timestamped log file in `logs/`:
   - Conversion statistics
   - Error messages (if any)
 
-## Quality Comparison
+## Quality Validation
 
-The `compare_quality.ps1` script validates the visual quality of your re-encoded videos using industry-standard metrics.
+The `analyze_quality.ps1` script validates the visual quality of your re-encoded videos using industry-standard metrics.
 
 ### How to Use
 
 ```powershell
-.\compare_quality.ps1
+.\analyze_quality.ps1
 ```
 
 The script will:
@@ -229,7 +229,7 @@ The script will:
 2. Match source videos with their re-encoded versions (handles container changes)
 3. Calculate quality metrics using ffmpeg's libvmaf filter
 4. Generate console output with color-coded results
-5. Save detailed CSV report to `reports/quality_comparison_YYYY-MM-DD_HH-MM-SS.csv`
+5. Save detailed JSON report to `reports/quality_comparison_YYYY-MM-DD_HH-MM-SS.json`
 
 ### Quality Metrics Explained
 
@@ -323,20 +323,20 @@ ffmpeg -filters 2>&1 | Select-String libvmaf
 - Uses 4 threads by default for faster processing
 - No GPU acceleration available for quality metrics
 
-### CSV Report Format
+### JSON Report Format
 
-The CSV report includes:
+The JSON report includes:
 - File names and sizes
 - Compression ratio and space saved
 - Source and encoded resolution/bitrate
 - VMAF, SSIM, PSNR scores
 - Quality assessment (Excellent/Very Good/Acceptable/Poor)
 
-Import into Excel or Google Sheets for further analysis.
+Can be imported into analysis tools or viewed with `view_reports.ps1`.
 
 ## Viewing Quality Reports
 
-The `view_reports.ps1` script provides an interactive way to browse and view saved quality comparison reports.
+The `view_reports.ps1` script provides an interactive way to browse and view saved quality validation reports.
 
 ### How to Use
 
@@ -346,7 +346,7 @@ The `view_reports.ps1` script provides an interactive way to browse and view sav
 
 ### Features
 
-- **Browse Reports**: Lists all CSV reports sorted by creation date (newest first)
+- **Browse Reports**: Lists all JSON reports sorted by creation date (newest first)
 - **Formatted Display**: Shows quality metrics with color-coded results
 - **Summary Statistics**: Displays averages and quality distribution
 - **Export to Text**: Save formatted report as plain text file
