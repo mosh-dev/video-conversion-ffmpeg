@@ -239,8 +239,14 @@ function Limit-BitrateToSource {
 function Get-DynamicParameters {
     param(
         [int]$Width,
+        [int]$Height,
         [double]$FPS
     )
+
+    # Use the larger dimension for resolution matching (handles portrait videos correctly)
+    # Portrait 1080x1920 should match 1080p profile (based on 1920)
+    # Landscape 1920x1080 should match 1080p profile (based on 1920)
+    $MaxDimension = [Math]::Max($Width, $Height)
 
     # Stage 1: Find the resolution tier (highest resolution that matches)
     # Force numeric sorting by converting to int
@@ -248,7 +254,7 @@ function Get-DynamicParameters {
     $MatchedResolution = $null
 
     foreach ($Rule in $SortedByResolution) {
-        if ($Width -ge $Rule.ResolutionMin) {
+        if ($MaxDimension -ge $Rule.ResolutionMin) {
             $MatchedResolution = $Rule.ResolutionMin
             break
         }
@@ -317,6 +323,33 @@ function Get-DynamicParameters {
         VideoBitrate = $FallbackParams.VideoBitrate
         MaxRate = $FallbackParams.MaxRate
         BufSize = $FallbackParams.BufSize
+    }
+}
+
+# Function to detect video rotation metadata
+function Get-VideoRotation {
+    param([string]$FilePath)
+
+    try {
+        # Get rotation from stream side data
+        $RotationRaw = & ffprobe -v error -select_streams v:0 -show_entries stream_side_data=rotation -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+
+        if ($RotationRaw) {
+            $Rotation = [int]$RotationRaw.Trim()
+            return $Rotation
+        }
+
+        # Alternative: Check for rotation tag in stream metadata
+        $RotationTagRaw = & ffprobe -v error -select_streams v:0 -show_entries stream_tags=rotate -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+
+        if ($RotationTagRaw) {
+            $Rotation = [int]$RotationTagRaw.Trim()
+            return $Rotation
+        }
+
+        return 0  # No rotation
+    } catch {
+        return 0  # Default to no rotation on error
     }
 }
 

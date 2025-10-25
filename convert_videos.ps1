@@ -207,7 +207,7 @@ foreach ($File in $VideoFiles) {
 
     if ($Metadata) {
         # Get dynamic parameters based on resolution and FPS
-        $DynamicParams = Get-DynamicParameters -Width $Metadata.Width -FPS $Metadata.FPS
+        $DynamicParams = Get-DynamicParameters -Width $Metadata.Width -Height $Metadata.Height -FPS $Metadata.FPS
         $VideoBitrate = $DynamicParams.VideoBitrate
         $MaxRate = $DynamicParams.MaxRate
         $BufSize = $DynamicParams.BufSize
@@ -307,43 +307,90 @@ foreach ($File in $VideoFiles) {
     # NVDEC supports: H.264, HEVC, VP8, VP9, AV1, MPEG-1/2/4, VC-1 (WMV), MJPEG
     # D3D11VA supports: H.264, HEVC, VP9, VC-1, MPEG-2 (Windows-native, works on all GPUs)
 
+    # Detect video rotation metadata and check if container format is changing
+    $Rotation = Get-VideoRotation -FilePath $InputPath
+    $HasRotation = ($Rotation -ne 0)
+    $ContainerChanging = ($File.Extension.ToLower() -ne $FileExtension.ToLower())
+    $NeedsAutoRotate = ($HasRotation -and $ContainerChanging)
+
+    if ($HasRotation -and $ContainerChanging) {
+        Write-Host "  Detected rotation: ${Rotation}° + container change - will auto-rotate video" -ForegroundColor Yellow
+        [System.IO.File]::AppendAllText($LogFile, "  Rotation detected: ${Rotation}° + container format changing - applying auto-rotation`n", [System.Text.UTF8Encoding]::new($false))
+    } elseif ($HasRotation) {
+        Write-Host "  Detected rotation: ${Rotation}° - preserving rotation metadata" -ForegroundColor DarkGray
+        [System.IO.File]::AppendAllText($LogFile, "  Rotation detected: ${Rotation}° - preserving as-is (same container)`n", [System.Text.UTF8Encoding]::new($false))
+    }
+
     # Get hardware acceleration method from mapping
     $HWAccelMethod = Get-HardwareAccelMethod -FileExtension $File.Extension
 
     # Build input arguments with hardware acceleration
+    # Only auto-rotate when container format is changing (e.g., MP4 → MKV)
     if ($HWAccelMethod -eq "cuda") {
         # NVIDIA NVDEC: Fastest, supports most codecs including VC-1 (WMV)
-        $FFmpegArgs = @(
-            "-hwaccel", "cuda",
-            "-hwaccel_output_format", "cuda",
-            "-i", $InputPath
-        )
+        if ($NeedsAutoRotate) {
+            $FFmpegArgs = @(
+                "-hwaccel", "cuda",
+                "-hwaccel_output_format", "cuda",
+                "-autorotate",  # Auto-rotate when container changes (flag, no value)
+                "-i", $InputPath
+            )
+        } else {
+            $FFmpegArgs = @(
+                "-hwaccel", "cuda",
+                "-hwaccel_output_format", "cuda",
+                "-noautorotate",  # Explicitly disable auto-rotation
+                "-i", $InputPath
+            )
+        }
         $UseCUDA = $true
     } elseif ($HWAccelMethod -eq "d3d11va") {
         # D3D11VA: Windows-native, works on NVIDIA/AMD/Intel GPUs
         Write-Host "  Note: Using D3D11VA hardware decoding" -ForegroundColor DarkGray
         [System.IO.File]::AppendAllText($LogFile, "  Hardware Acceleration: D3D11VA`n", [System.Text.UTF8Encoding]::new($false))
-        $FFmpegArgs = @(
-            "-hwaccel", "d3d11va",
-            "-i", $InputPath
-        )
+        if ($NeedsAutoRotate) {
+            $FFmpegArgs = @(
+                "-hwaccel", "d3d11va",
+                "-autorotate",  # Auto-rotate when container changes (flag, no value)
+                "-i", $InputPath
+            )
+        } else {
+            $FFmpegArgs = @(
+                "-hwaccel", "d3d11va",
+                "-noautorotate",  # Explicitly disable auto-rotation
+                "-i", $InputPath
+            )
+        }
         $UseCUDA = $false
     } else {
         # Software decoding fallback (should rarely be needed)
         Write-Host "  Note: Using software decoding" -ForegroundColor DarkGray
         [System.IO.File]::AppendAllText($LogFile, "  Hardware Acceleration: Software decoding (no HW accel)`n", [System.Text.UTF8Encoding]::new($false))
-        $FFmpegArgs = @(
-            "-i", $InputPath
-        )
+        if ($NeedsAutoRotate) {
+            $FFmpegArgs = @(
+                "-autorotate",  # Auto-rotate when container changes (flag, no value)
+                "-i", $InputPath
+            )
+        } else {
+            $FFmpegArgs = @(
+                "-noautorotate",  # Explicitly disable auto-rotation
+                "-i", $InputPath
+            )
+        }
         $UseCUDA = $false
     }
+
+    # Preserve metadata (but we'll clear rotation after auto-rotating)
+    $FFmpegArgs += @("-map_metadata", "0")
 
     # For MKV files, add specific stream mapping
     if ($File.Extension -match "^\.(mkv|MKV)$") {
         $FFmpegArgs += @(
             "-map", "0",           # Map all streams (video, audio, subtitles, data, metadata)
             "-fflags", "+genpts",  # Generate presentation timestamps
-            "-ignore_unknown"      # Ignore unknown streams
+            "-ignore_unknown",     # Ignore unknown streams
+            "-codec:s", "copy",    # Copy subtitle streams
+            "-codec:d", "copy"     # Copy data streams (including metadata)
         )
     }
 
