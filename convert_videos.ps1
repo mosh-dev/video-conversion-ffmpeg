@@ -124,7 +124,17 @@ Write-Host "  Audio:               $AudioDisplay" -ForegroundColor White
 Write-Host "  Skip Mode:           $SkipModeDisplay" -ForegroundColor White
 Write-Host "========================================`n" -ForegroundColor Cyan
 
-[System.IO.File]::AppendAllText($LogFile, "Found $($VideoFiles.Count) video file(s) to process`n`n", [System.Text.UTF8Encoding]::new($false))
+# Log conversion settings to file
+[System.IO.File]::AppendAllText($LogFile, "CONVERSION SETTINGS`n", [System.Text.UTF8Encoding]::new($false))
+[System.IO.File]::AppendAllText($LogFile, ("=" * 80) + "`n", [System.Text.UTF8Encoding]::new($false))
+[System.IO.File]::AppendAllText($LogFile, "Files:               $($VideoFiles.Count) video(s) found`n", [System.Text.UTF8Encoding]::new($false))
+[System.IO.File]::AppendAllText($LogFile, "Output Video Codec:  $OutputCodec`n", [System.Text.UTF8Encoding]::new($false))
+[System.IO.File]::AppendAllText($LogFile, "Parameter Mode:      $ModeStr`n", [System.Text.UTF8Encoding]::new($false))
+[System.IO.File]::AppendAllText($LogFile, "Bitrate Multiplier:  $($BitrateMultiplier.ToString('0.0'))x`n", [System.Text.UTF8Encoding]::new($false))
+[System.IO.File]::AppendAllText($LogFile, "Container:           $ContainerDisplay`n", [System.Text.UTF8Encoding]::new($false))
+[System.IO.File]::AppendAllText($LogFile, "Audio:               $AudioDisplay`n", [System.Text.UTF8Encoding]::new($false))
+[System.IO.File]::AppendAllText($LogFile, "Skip Mode:           $SkipModeDisplay`n", [System.Text.UTF8Encoding]::new($false))
+[System.IO.File]::AppendAllText($LogFile, ("=" * 80) + "`n`n", [System.Text.UTF8Encoding]::new($false))
 
 # Process each video file
 $SuccessCount = 0
@@ -159,6 +169,7 @@ foreach ($File in $VideoFiles) {
             $OutputFileName = "${BaseFileName}_${OriginalExtension}${FileExtension}"
             $OutputPath = Join-Path $OutputDir $OutputFileName
             Write-Host "  Note: Filename collision detected - output renamed to: $OutputFileName" -ForegroundColor DarkGray
+            [System.IO.File]::AppendAllText($LogFile, "Note: Filename collision detected for $($File.Name) - renamed to: $OutputFileName`n", [System.Text.UTF8Encoding]::new($false))
         }
     }
 
@@ -222,7 +233,10 @@ foreach ($File in $VideoFiles) {
                 $BitrateMethodDisplay = if ($Metadata.BitrateMethod -eq "calculated") { " [calculated]" } else { "" }
                 Write-Host "  Bitrate adjusted: $($LimitResult.OriginalBitrate) -> $VideoBitrate (source: $SourceBitrateStr$BitrateMethodDisplay)" -ForegroundColor Yellow
                 Write-Host "  Settings: Bitrate=$VideoBitrate MaxRate=$MaxRate BufSize=$BufSize Preset=$Preset" -ForegroundColor Gray
-                [System.IO.File]::AppendAllText($LogFile, "Processing: $($File.Name) - $($Metadata.Resolution) @ $($Metadata.FPS)fps - Profile: $ProfileName - Input: $InputSizeMB MB - Source Bitrate: $SourceBitrateStr ($($Metadata.BitrateMethod)) - Adjusted from $($LimitResult.OriginalBitrate) to $VideoBitrate - MaxRate: $MaxRate, BufSize: $BufSize, Preset: $Preset`n", [System.Text.UTF8Encoding]::new($false))
+                [System.IO.File]::AppendAllText($LogFile, "Processing: $($File.Name) - $($Metadata.Resolution) @ $($Metadata.FPS)fps - Profile: $ProfileName - Input: $InputSizeMB MB`n", [System.Text.UTF8Encoding]::new($false))
+                [System.IO.File]::AppendAllText($LogFile, "  Source Bitrate: $SourceBitrateStr ($($Metadata.BitrateMethod))`n", [System.Text.UTF8Encoding]::new($false))
+                [System.IO.File]::AppendAllText($LogFile, "  Bitrate adjusted: $($LimitResult.OriginalBitrate) -> $VideoBitrate`n", [System.Text.UTF8Encoding]::new($false))
+                [System.IO.File]::AppendAllText($LogFile, "  Settings: Bitrate=$VideoBitrate, MaxRate=$MaxRate, BufSize=$BufSize, Preset=$Preset`n", [System.Text.UTF8Encoding]::new($false))
             } else {
                 # Check if source bitrate was not available
                 if ($SourceBitrate -eq 0) {
@@ -233,13 +247,17 @@ foreach ($File in $VideoFiles) {
                     Write-Host "  Source bitrate: $SourceBitrateStr$BitrateMethodDisplay - using profile bitrate" -ForegroundColor DarkGray
                 }
                 Write-Host "  Settings: Bitrate=$VideoBitrate MaxRate=$MaxRate BufSize=$BufSize Preset=$Preset" -ForegroundColor Gray
-                [System.IO.File]::AppendAllText($LogFile, "Processing: $($File.Name) - $($Metadata.Resolution) @ $($Metadata.FPS)fps - Profile: $ProfileName - Input: $InputSizeMB MB - Source Bitrate: $(if ($SourceBitrate -gt 0) { "$SourceBitrateStr ($($Metadata.BitrateMethod))" } else { "unknown" }) - Bitrate: $VideoBitrate, MaxRate: $MaxRate, BufSize: $BufSize, Preset: $Preset`n", [System.Text.UTF8Encoding]::new($false))
+                [System.IO.File]::AppendAllText($LogFile, "Processing: $($File.Name) - $($Metadata.Resolution) @ $($Metadata.FPS)fps - Profile: $ProfileName - Input: $InputSizeMB MB`n", [System.Text.UTF8Encoding]::new($false))
+                [System.IO.File]::AppendAllText($LogFile, "  Source Bitrate: $(if ($SourceBitrate -gt 0) { "$SourceBitrateStr ($($Metadata.BitrateMethod))" } else { "unknown" })`n", [System.Text.UTF8Encoding]::new($false))
+                [System.IO.File]::AppendAllText($LogFile, "  Settings: Bitrate=$VideoBitrate, MaxRate=$MaxRate, BufSize=$BufSize, Preset=$Preset`n", [System.Text.UTF8Encoding]::new($false))
             }
         } else {
             Write-Host "[$CurrentFile/$($VideoFiles.Count)] $($File.Name) ($InputSizeMB MB) | Default ($VideoBitrate, $Preset)" -ForegroundColor Cyan
+            [System.IO.File]::AppendAllText($LogFile, "Processing: $($File.Name) - Input: $InputSizeMB MB - Using default parameters (Bitrate=$VideoBitrate, Preset=$Preset)`n", [System.Text.UTF8Encoding]::new($false))
         }
     } else {
         Write-Host "[$CurrentFile/$($VideoFiles.Count)] $($File.Name) ($InputSizeMB MB) | Default ($VideoBitrate, $Preset)" -ForegroundColor Cyan
+        [System.IO.File]::AppendAllText($LogFile, "Processing: $($File.Name) - Input: $InputSizeMB MB - Using default parameters (Bitrate=$VideoBitrate, Preset=$Preset)`n", [System.Text.UTF8Encoding]::new($false))
     }
 
     # Determine audio codec to use
@@ -273,11 +291,13 @@ foreach ($File in $VideoFiles) {
                 $AudioCodecToUse = "aac"  # AAC is universally compatible
             }
             $AudioBitrate = $DefaultAudioBitrate
+            [System.IO.File]::AppendAllText($LogFile, "  Audio: Re-encoding $($SourceAudioCodec.ToUpper()) (incompatible with $($FileExtension.ToUpper())) -> $AudioCodecToUse @ $DefaultAudioBitrate`n", [System.Text.UTF8Encoding]::new($false))
         }
     } else {
         $AudioCodecToUse = $AudioCodecMap[$AudioCodec.ToLower()]
         if (-not $AudioCodecToUse) {
             Write-Host "  Warning: Invalid audio codec '$AudioCodec'. Using 'aac' as fallback." -ForegroundColor Yellow
+            [System.IO.File]::AppendAllText($LogFile, "  Warning: Invalid audio codec '$AudioCodec'. Using 'aac' as fallback.`n", [System.Text.UTF8Encoding]::new($false))
             $AudioCodecToUse = "aac"  # AAC for maximum compatibility
         }
         $AudioBitrate = $DefaultAudioBitrate
@@ -303,6 +323,7 @@ foreach ($File in $VideoFiles) {
     } elseif ($HWAccelMethod -eq "d3d11va") {
         # D3D11VA: Windows-native, works on NVIDIA/AMD/Intel GPUs
         Write-Host "  Note: Using D3D11VA hardware decoding" -ForegroundColor DarkGray
+        [System.IO.File]::AppendAllText($LogFile, "  Hardware Acceleration: D3D11VA`n", [System.Text.UTF8Encoding]::new($false))
         $FFmpegArgs = @(
             "-hwaccel", "d3d11va",
             "-i", $InputPath
@@ -311,6 +332,7 @@ foreach ($File in $VideoFiles) {
     } else {
         # Software decoding fallback (should rarely be needed)
         Write-Host "  Note: Using software decoding" -ForegroundColor DarkGray
+        [System.IO.File]::AppendAllText($LogFile, "  Hardware Acceleration: Software decoding (no HW accel)`n", [System.Text.UTF8Encoding]::new($false))
         $FFmpegArgs = @(
             "-i", $InputPath
         )
@@ -474,6 +496,8 @@ Write-Host "`nDone: $SuccessCount | Skipped: $SkipCount | Errors: $ErrorCount | 
 
 # Write summary to log
 $LogSeparator = "=" * 80
+[System.IO.File]::AppendAllText($LogFile, "`n", [System.Text.UTF8Encoding]::new($false))
+[System.IO.File]::AppendAllText($LogFile, "Done: $SuccessCount | Skipped: $SkipCount | Errors: $ErrorCount | Time: $TotalTime`n", [System.Text.UTF8Encoding]::new($false))
 [System.IO.File]::AppendAllText($LogFile, "`n$LogSeparator`n", [System.Text.UTF8Encoding]::new($false))
 [System.IO.File]::AppendAllText($LogFile, "CONVERSION SUMMARY`n", [System.Text.UTF8Encoding]::new($false))
 [System.IO.File]::AppendAllText($LogFile, "$LogSeparator`n", [System.Text.UTF8Encoding]::new($false))
