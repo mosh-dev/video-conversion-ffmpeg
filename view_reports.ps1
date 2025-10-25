@@ -94,36 +94,6 @@ function Show-FormattedReport {
     $poorCount = ($reportData | Where-Object { $_.QualityAssessment -eq "Poor" }).Count
 
     Write-Host ""
-    Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host "  SUMMARY" -ForegroundColor Cyan
-    Write-Host "========================================" -ForegroundColor Cyan
-
-    Write-Host "Files: $($reportData.Count) | " -NoNewline -ForegroundColor White
-    Write-Host "Avg Quality - VMAF: " -NoNewline -ForegroundColor White
-    Write-Host "$avgVMAF" -NoNewline -ForegroundColor Cyan
-    Write-Host " | SSIM: " -NoNewline -ForegroundColor White
-    Write-Host "$avgSSIM" -NoNewline -ForegroundColor Cyan
-    Write-Host " | PSNR: " -NoNewline -ForegroundColor White
-    Write-Host "${avgPSNR}dB" -ForegroundColor Cyan
-
-    Write-Host "Avg Compression: " -NoNewline -ForegroundColor White
-    Write-Host "${avgCompression}x (${avgSpaceSaved}% saved)" -NoNewline -ForegroundColor Cyan
-    Write-Host " | Analysis Time: " -NoNewline -ForegroundColor White
-    Write-Host "${totalAnalysisTime}s" -ForegroundColor Cyan
-
-    Write-Host "Quality: " -NoNewline -ForegroundColor White
-    $qualityParts = @()
-    if ($excellentCount -gt 0) { $qualityParts += "Excellent:$excellentCount" }
-    if ($veryGoodCount -gt 0) { $qualityParts += "VeryGood:$veryGoodCount" }
-    if ($acceptableCount -gt 0) { $qualityParts += "Acceptable:$acceptableCount" }
-    if ($poorCount -gt 0) { $qualityParts += "Poor:$poorCount" }
-
-    if ($qualityParts.Count -gt 0) {
-        Write-Host ($qualityParts -join " | ") -ForegroundColor White
-    } else {
-        Write-Host "No quality data" -ForegroundColor DarkGray
-    }
-    Write-Host ""
 }
 
 # ============================================================================
