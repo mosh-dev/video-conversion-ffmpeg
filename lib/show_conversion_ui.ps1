@@ -131,6 +131,10 @@ function Show-ConversionUI {
                                             <Trigger Property="IsMouseOver" Value="True">
                                                 <Setter TargetName="Border" Property="BorderBrush" Value="$accentColor"/>
                                             </Trigger>
+                                            <Trigger Property="IsEnabled" Value="False">
+                                                <Setter TargetName="Border" Property="Background" Value="$borderColor"/>
+                                                <Setter TargetName="Border" Property="Opacity" Value="0.5"/>
+                                            </Trigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>
                                 </ToggleButton.Template>
@@ -143,7 +147,17 @@ function Show-ConversionUI {
                                 ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
                                 Margin="12,0,32,0"
                                 VerticalAlignment="Center"
-                                HorizontalAlignment="Left"/>
+                                HorizontalAlignment="Left">
+                                <ContentPresenter.Style>
+                                    <Style TargetType="ContentPresenter">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsEnabled, RelativeSource={RelativeSource AncestorType=ComboBox}}" Value="False">
+                                                <Setter Property="Opacity" Value="0.5"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ContentPresenter.Style>
+                            </ContentPresenter>
                             <Popup
                                 x:Name="Popup"
                                 Placement="Bottom"
@@ -612,6 +626,26 @@ public class WindowHelper {
     $audioCombo.SelectedIndex = if ($PreserveAudio) { 0 } else { 1 }
     $bitrateSlider.Value = [int]($BitrateMultiplier * 10)
     $bitrateValue.Text = "$($BitrateMultiplier.ToString('0.0'))x"
+
+    # Function to update audio combo state based on container selection
+    $UpdateAudioComboState = {
+        if ($containerCombo.SelectedIndex -eq 0) {
+            # Preserve original container selected - force audio copy and disable combo
+            $audioCombo.SelectedIndex = 0
+            $audioCombo.IsEnabled = $false
+        } else {
+            # Convert container selected - enable audio combo
+            $audioCombo.IsEnabled = $true
+        }
+    }
+
+    # Apply initial state
+    & $UpdateAudioComboState
+
+    # Container combo event - update audio combo state when container selection changes
+    $containerCombo.Add_SelectionChanged({
+        & $UpdateAudioComboState
+    })
 
     # Slider event
     $bitrateSlider.Add_ValueChanged({
