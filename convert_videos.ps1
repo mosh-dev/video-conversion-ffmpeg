@@ -219,19 +219,41 @@ foreach ($File in $VideoFiles) {
         $AudioBitrate = $null
 
         # Check for incompatible audio codec/container combinations
-        # MP4/M4V/MOV containers don't support: WMAPro, Vorbis, DTS, PCM variants, etc.
-        # If PreserveContainer is disabled and output is MP4/M4V/MOV, we need to check source audio
+        # MP4/M4V/MOV containers don't support: WMA, WMAPro, Vorbis, DTS, PCM variants, etc.
+        # MKV containers don't support: WMA (Windows Media Audio)
+        # Detect actual audio codec from source file
+        try {
+            $AudioCodecRaw = & ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of csv=p=0 $InputPath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+            $SourceAudioCodec = if ($AudioCodecRaw) { $AudioCodecRaw.Trim().ToLower() } else { $null }
+        } catch {
+            $SourceAudioCodec = $null
+        }
+
+        # Define incompatible audio codecs for each container type
+        $IncompatibleForMP4 = @("wmav1", "wmav2", "wmapro", "wmalossless", "vorbis", "dts", "dca", "pcm_s16le", "pcm_s24le", "pcm_s32le")
+        $IncompatibleForMKV = @("wmav1", "wmav2", "wmapro", "wmalossless")
+
+        $NeedsReencoding = $false
         if ($FileExtension.ToLower() -match "\.(mp4|m4v|mov)$") {
-            $IncompatibleSourceFormats = @(".wmv", ".avi", ".mkv", ".webm", ".flv")
-            if ($IncompatibleSourceFormats -contains $SourceExtension) {
-                # Force audio re-encoding for potentially incompatible sources
-                Write-Host "  Note: Re-encoding audio (source audio codec may not be compatible with $($FileExtension.ToUpper()) container)" -ForegroundColor Yellow
-                $AudioCodecToUse = $AudioCodecMap[$AudioCodec.ToLower()]
-                if (-not $AudioCodecToUse) {
-                    $AudioCodecToUse = "aac"  # AAC is universally compatible with MP4
-                }
-                $AudioBitrate = $DefaultAudioBitrate
+            # Check if source audio codec is incompatible with MP4/M4V/MOV
+            if ($SourceAudioCodec -and ($IncompatibleForMP4 -contains $SourceAudioCodec)) {
+                Write-Host "  Note: Re-encoding audio ($($SourceAudioCodec.ToUpper()) codec not compatible with $($FileExtension.ToUpper()) container)" -ForegroundColor Yellow
+                $NeedsReencoding = $true
             }
+        } elseif ($FileExtension.ToLower() -eq ".mkv") {
+            # Check if source audio codec is incompatible with MKV
+            if ($SourceAudioCodec -and ($IncompatibleForMKV -contains $SourceAudioCodec)) {
+                Write-Host "  Note: Re-encoding audio ($($SourceAudioCodec.ToUpper()) codec not compatible with MKV container)" -ForegroundColor Yellow
+                $NeedsReencoding = $true
+            }
+        }
+
+        if ($NeedsReencoding) {
+            $AudioCodecToUse = $AudioCodecMap[$AudioCodec.ToLower()]
+            if (-not $AudioCodecToUse) {
+                $AudioCodecToUse = "aac"  # AAC is universally compatible
+            }
+            $AudioBitrate = $DefaultAudioBitrate
         }
     } else {
         $AudioCodecToUse = $AudioCodecMap[$AudioCodec.ToLower()]
