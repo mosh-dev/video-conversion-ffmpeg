@@ -104,6 +104,36 @@ function Get-VideoMetadata {
     }
 }
 
+# Function to calculate MaxRate and BufSize based on average bitrate (best practices)
+function Get-BitrateParameters {
+    param([string]$AverageBitrate)
+
+    # Extract numeric value and unit
+    if ($AverageBitrate -match "^(\d+(?:\.\d+)?)([MKG])$") {
+        $Value = [double]$matches[1]
+        $Unit = $matches[2]
+
+        # Best practices for NVENC VBR encoding:
+        # MaxRate = 1.5x average (allows headroom for complex scenes)
+        # BufSize = 2x average (standard buffer size for VBR)
+        $MaxRateValue = [math]::Round($Value * 1.5, 1)
+        $BufSizeValue = [math]::Round($Value * 2.0, 1)
+
+        return @{
+            VideoBitrate = $AverageBitrate
+            MaxRate = "${MaxRateValue}${Unit}"
+            BufSize = "${BufSizeValue}${Unit}"
+        }
+    }
+
+    # Fallback if parsing fails
+    return @{
+        VideoBitrate = $AverageBitrate
+        MaxRate = $AverageBitrate
+        BufSize = $AverageBitrate
+    }
+}
+
 # Function to apply bitrate modifier to a bitrate string (e.g., "20M" -> "22M")
 function Set-BitrateMultiplier {
     param(
@@ -236,11 +266,14 @@ function Get-DynamicParameters {
     # First try exact range match
     foreach ($ResProfile in $ResolutionProfiles) {
         if ($FPS -ge $ResProfile.FPSMin -and $FPS -le $ResProfile.FPSMax) {
-            # Apply bitrate modifier to all bitrate values
+            # Apply bitrate modifier and calculate MaxRate/BufSize
+            $AverageBitrate = Set-BitrateMultiplier -Bitrate $ResProfile.VideoBitrate -Modifier $BitrateMultiplier
+            $BitrateParams = Get-BitrateParameters -AverageBitrate $AverageBitrate
+
             $ModifiedRule = $ResProfile.Clone()
-            $ModifiedRule.VideoBitrate = Set-BitrateMultiplier -Bitrate $ResProfile.VideoBitrate -Modifier $BitrateMultiplier
-            $ModifiedRule.MaxRate = Set-BitrateMultiplier -Bitrate $ResProfile.MaxRate -Modifier $BitrateMultiplier
-            $ModifiedRule.BufSize = Set-BitrateMultiplier -Bitrate $ResProfile.BufSize -Modifier $BitrateMultiplier
+            $ModifiedRule.VideoBitrate = $BitrateParams.VideoBitrate
+            $ModifiedRule.MaxRate = $BitrateParams.MaxRate
+            $ModifiedRule.BufSize = $BitrateParams.BufSize
             return $ModifiedRule
         }
     }
@@ -265,19 +298,26 @@ function Get-DynamicParameters {
     }
 
     if ($ClosestProfile) {
-        # Apply bitrate modifier to all bitrate values
+        # Apply bitrate modifier and calculate MaxRate/BufSize
+        $AverageBitrate = Set-BitrateMultiplier -Bitrate $ClosestProfile.VideoBitrate -Modifier $BitrateMultiplier
+        $BitrateParams = Get-BitrateParameters -AverageBitrate $AverageBitrate
+
         $ModifiedRule = $ClosestProfile.Clone()
-        $ModifiedRule.VideoBitrate = Set-BitrateMultiplier -Bitrate $ClosestProfile.VideoBitrate -Modifier $BitrateMultiplier
-        $ModifiedRule.MaxRate = Set-BitrateMultiplier -Bitrate $ClosestProfile.MaxRate -Modifier $BitrateMultiplier
-        $ModifiedRule.BufSize = Set-BitrateMultiplier -Bitrate $ClosestProfile.BufSize -Modifier $BitrateMultiplier
+        $ModifiedRule.VideoBitrate = $BitrateParams.VideoBitrate
+        $ModifiedRule.MaxRate = $BitrateParams.MaxRate
+        $ModifiedRule.BufSize = $BitrateParams.BufSize
         return $ModifiedRule
     }
 
     # Default fallback (should not reach here if map is properly configured)
     $FallbackBitrate = Set-BitrateMultiplier -Bitrate "15M" -Modifier $BitrateMultiplier
-    $FallbackMaxRate = Set-BitrateMultiplier -Bitrate "25M" -Modifier $BitrateMultiplier
-    $FallbackBufSize = Set-BitrateMultiplier -Bitrate "30M" -Modifier $BitrateMultiplier
-    return @{ ProfileName = "Fallback Default"; VideoBitrate = $FallbackBitrate; MaxRate = $FallbackMaxRate; BufSize = $FallbackBufSize }
+    $FallbackParams = Get-BitrateParameters -AverageBitrate $FallbackBitrate
+    return @{
+        ProfileName = "Fallback Default"
+        VideoBitrate = $FallbackParams.VideoBitrate
+        MaxRate = $FallbackParams.MaxRate
+        BufSize = $FallbackParams.BufSize
+    }
 }
 
 # Function to get appropriate AAC sample rate based on source audio

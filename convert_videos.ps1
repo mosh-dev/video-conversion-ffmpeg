@@ -248,9 +248,10 @@ foreach ($File in $VideoFiles) {
         }
     } else {
         # Fallback to default parameters if metadata detection fails
-        $VideoBitrate = $DefaultVideoBitrate
-        $MaxRate = $DefaultMaxRate
-        $BufSize = $DefaultBufSize
+        $BitrateParams = Get-BitrateParameters -AverageBitrate $DefaultVideoBitrate
+        $VideoBitrate = $BitrateParams.VideoBitrate
+        $MaxRate = $BitrateParams.MaxRate
+        $BufSize = $BitrateParams.BufSize
         Write-Host "[$CurrentFile/$($VideoFiles.Count)] $($File.Name) ($InputSizeMB MB) | Using defaults ($VideoBitrate, $Preset)" -ForegroundColor Cyan
         [System.IO.File]::AppendAllText($LogFile, "Processing: $($File.Name) - Input: $InputSizeMB MB - Using default parameters (Bitrate=$VideoBitrate, Preset=$Preset)`n", [System.Text.UTF8Encoding]::new($false))
     }
