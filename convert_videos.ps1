@@ -206,12 +206,31 @@ foreach ($File in $VideoFiles) {
     }
 
     # Build ffmpeg command
-    # Use -hwaccel cuda with output format cuda for full GPU pipeline
-    $FFmpegArgs = @(
-        "-hwaccel", "cuda",
-        "-hwaccel_output_format", "cuda",
-        "-i", $InputPath
-    )
+    # Determine if we can use CUDA hardware acceleration based on input codec
+    # WMV (wmv3), old MPEG formats, and some others don't support CUDA decoding
+    $UseCUDA = $true
+    $SourceExtension = $File.Extension.ToLower()
+
+    # Disable CUDA for formats that don't support it
+    if ($SourceExtension -match "\.(wmv|avi|flv)$") {
+        $UseCUDA = $false
+    }
+
+    # Build input arguments
+    if ($UseCUDA) {
+        # Use CUDA hardware acceleration for supported formats
+        $FFmpegArgs = @(
+            "-hwaccel", "cuda",
+            "-hwaccel_output_format", "cuda",
+            "-i", $InputPath
+        )
+    } else {
+        # Software decoding for unsupported formats
+        Write-Host "  Note: Using software decoding (format doesn't support CUDA acceleration)" -ForegroundColor DarkGray
+        $FFmpegArgs = @(
+            "-i", $InputPath
+        )
+    }
 
     # For MKV files, add specific stream mapping
     if ($File.Extension -match "^\.(mkv|MKV)$") {
@@ -222,10 +241,18 @@ foreach ($File in $VideoFiles) {
         )
     }
 
-    # Full GPU pipeline: decode on GPU -> scale/format on GPU -> download to system memory for encoder
-    $FFmpegArgs += @(
-        "-vf", "scale_cuda=format=p010le"
-    )
+    # Add video filter based on whether CUDA is available
+    if ($UseCUDA) {
+        # Full GPU pipeline: decode on GPU -> scale/format on GPU -> download to system memory for encoder
+        $FFmpegArgs += @(
+            "-vf", "scale_cuda=format=p010le"
+        )
+    } else {
+        # Software scaling with P010LE format for compatibility
+        $FFmpegArgs += @(
+            "-vf", "scale=format=p010le"
+        )
+    }
 
     # Add video encoding parameters
     $FFmpegArgs += @(
@@ -242,16 +269,22 @@ foreach ($File in $VideoFiles) {
         $FFmpegArgs += @(
             "-tune:v", "hq",
             "-rc:v", "vbr",
-            "-tier:v", "0",
-            "-movflags", "+faststart+write_colr"
+            "-tier:v", "0"
         )
+        # Only add movflags for MP4/MOV containers
+        if ($FileExtension.ToLower() -match "\.(mp4|m4v|mov)$") {
+            $FFmpegArgs += @("-movflags", "+faststart+write_colr")
+        }
     } elseif ($DefaultVideoCodec -eq "hevc_nvenc") {
         $FFmpegArgs += @(
             "-tune:v", "hq",
             "-rc:v", "vbr",
-            "-tier:v", "0",
-            "-movflags", "+faststart"
+            "-tier:v", "0"
         )
+        # Only add movflags for MP4/MOV containers
+        if ($FileExtension.ToLower() -match "\.(mp4|m4v|mov)$") {
+            $FFmpegArgs += @("-movflags", "+faststart")
+        }
     }
 
     # Add audio encoding parameters
@@ -277,12 +310,17 @@ foreach ($File in $VideoFiles) {
     $FFmpegArgs = @("-y") + $FFmpegArgs
 
     # Determine output format based on file extension (needed because of .tmp extension)
-    $OutputFormat = switch ($FileExtension) {
+    $OutputFormat = switch ($FileExtension.ToLower()) {
         ".mkv" { "matroska" }
         ".mp4" { "mp4" }
+        ".m4v" { "mp4" }
         ".webm" { "webm" }
         ".mov" { "mov" }
-        default { "matroska" }
+        ".ts" { "mpegts" }
+        ".m2ts" { "mpegts" }
+        ".wmv" { "asf" }
+        ".avi" { "avi" }
+        default { "mp4" }  # Default to MP4 for better compatibility
     }
 
     # Add output format and temporary output path
