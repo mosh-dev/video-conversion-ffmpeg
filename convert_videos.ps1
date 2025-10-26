@@ -311,7 +311,6 @@ foreach ($File in $VideoFiles) {
     $Rotation = Get-VideoRotation -FilePath $InputPath
     $HasRotation = ($Rotation -ne 0)
     $ContainerChanging = ($File.Extension.ToLower() -ne $FileExtension.ToLower())
-    $NeedsAutoRotate = ($HasRotation -and $ContainerChanging)
 
     if ($HasRotation -and $ContainerChanging) {
         Write-Host "  Detected rotation: ${Rotation}° + container change - !!!" -ForegroundColor Yellow
