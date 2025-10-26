@@ -7,10 +7,10 @@
 # Edit config.ps1 to customize all parameters
 
 # Load configuration
-. .\lib\config.ps1
+. .\config\config.ps1
 
 # Load codec mappings
-. .\lib\codec_mappings.ps1
+. .\config\codec_mappings.ps1
 
 # Load helper functions
 . .\lib\conversion_helpers.ps1

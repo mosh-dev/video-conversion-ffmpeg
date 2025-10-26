@@ -13,8 +13,9 @@ The codebase is organized into modular components:
 - **`convert_videos.ps1`** - Main conversion script orchestrating the entire process
 - **`analyze_quality.ps1`** - Quality validation tool using VMAF/SSIM/PSNR metrics
 - **`view_reports.ps1`** - Interactive report viewer for browsing and displaying JSON quality reports
-- **`lib/config.ps1`** - Centralized configuration file with all user-modifiable parameters
-- **`lib/codec_mappings.ps1`** - Container/codec compatibility mappings and validation functions
+- **`config/config.ps1`** - Centralized configuration file with all user-modifiable parameters
+- **`config/codec_mappings.ps1`** - Container/codec compatibility mappings and validation functions
+- **`config/quality_analyzer_config.ps1`** - Quality analyzer configuration settings
 - **`lib/conversion_helpers.ps1`** - Helper functions for metadata detection, parameter selection, and bitrate calculation
 - **`lib/show_conversion_ui.ps1`** - Modern Windows 11-style GUI for interactive parameter selection
 
@@ -23,7 +24,7 @@ This modular separation allows users to modify settings in `config.ps1` without 
 ### Key Design Patterns
 
 1. **Codec/Container Compatibility Mapping** (NEW): Centralized configuration for all codec/container rules:
-   - All compatibility rules defined in `lib/codec_mappings.ps1`
+   - All compatibility rules defined in `config/codec_mappings.ps1`
    - Simple approach: Only define `SupportedVideoCodecs` and `SupportedAudioCodecs` - anything else is incompatible
    - Helper functions: `Test-CodecContainerCompatibility`, `Test-AudioContainerCompatibility`, `Get-SkipReason`
    - Automatic validation on startup to catch configuration errors
@@ -160,9 +161,9 @@ Interactive JSON report viewer for browsing and displaying quality validation re
 - Share formatted reports without external tools
 - Archive quality metrics in human-readable format
 
-## Configuration (lib/config.ps1)
+## Configuration (config/config.ps1)
 
-All parameters are configured in `lib/config.ps1`:
+All parameters are configured in `config/config.ps1`:
 
 **Essential Settings:**
 - `$OutputCodec` - Choose "AV1" or "HEVC" codec (can be overridden in GUI)
@@ -176,7 +177,7 @@ All parameters are configured in `lib/config.ps1`:
 
 **Parameter Profiles:**
 
-The `$ParameterMap` array in `lib/config.ps1` defines encoding parameters for different resolution/FPS combinations:
+The `$ParameterMap` array in `config/config.ps1` defines encoding parameters for different resolution/FPS combinations:
 - 8K, 4K, 2.7K/1440p, 1080p (with multiple FPS tiers), and 720p profiles
 - Each profile specifies: VideoBitrate, MaxRate, BufSize, and Preset
 - Use `$BitrateModifier` to globally adjust all bitrates (e.g., 1.1 = 10% increase)
@@ -293,7 +294,7 @@ When editing `convert_videos.ps1` or helper files:
    - See lines 216-265 in `convert_videos.ps1` for implementation
 
 6. **Container/Codec Validation**: Prevents ffmpeg errors from incompatible combinations:
-   - All codec/container rules defined in `lib/codec_mappings.ps1`
+   - All codec/container rules defined in `config/codec_mappings.ps1`
    - Automatic validation on script startup using `Test-CodecMappingsValid`
    - Uses `Test-CodecContainerCompatibility` to check video codec support
    - Uses `Test-AudioContainerCompatibility` to check audio codec support
@@ -324,7 +325,7 @@ When modifying `$ParameterMap` in config.ps1:
 
 ## Supported Input Formats
 
-The script handles a wide variety of video formats through the `$FileExtensions` array in `lib/config.ps1`:
+The script handles a wide variety of video formats through the `$FileExtensions` array in `config/config.ps1`:
 
 **Tested & Fully Supported:**
 - MP4, MOV, MKV, WMV, AVI - Mainstream formats with full hardware acceleration
@@ -338,8 +339,8 @@ The script handles a wide variety of video formats through the `$FileExtensions`
 - WebM, OGV, ASF - May work but require testing
 
 **Adding New Formats:**
-1. Add pattern to `$FileExtensions` array in `lib/config.ps1` (e.g., `"*.mpg"`)
-2. Add format definition to `$ContainerCodecSupport` in `lib/codec_mappings.ps1`:
+1. Add pattern to `$FileExtensions` array in `config/config.ps1` (e.g., `"*.mpg"`)
+2. Add format definition to `$ContainerCodecSupport` in `config/codec_mappings.ps1`:
    ```powershell
    ".mpg" = @{
        SupportedVideoCodecs = @("mpeg2", "mpeg1")  # Only list what IS supported
@@ -377,9 +378,11 @@ VideoConversion/
 ├── _output_files/        # Re-encoded videos
 ├── logs/                 # Conversion logs (timestamped)
 ├── reports/              # Quality validation reports (JSON)
+├── config/
+│   ├── config.ps1                  # User configuration
+│   ├── codec_mappings.ps1          # Codec/container compatibility mappings
+│   └── quality_analyzer_config.ps1 # Quality analyzer settings
 ├── lib/
-│   ├── config.ps1        # User configuration
-│   ├── codec_mappings.ps1         # Codec/container compatibility mappings
 │   ├── conversion_helpers.ps1   # Helper functions
 │   └── show_conversion_ui.ps1   # GUI interface
 ├── convert_videos.ps1    # Main conversion script

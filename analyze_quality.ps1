@@ -7,12 +7,12 @@
 # Requires: ffmpeg
 
 # Import configuration
-. ".\lib\quality_analyzer_config.ps1"
+. ".\config\quality_analyzer_config.ps1"
 
 # Validate that at least one metric is enabled
 if (-not $EnableVMAF -and -not $EnableSSIM -and -not $EnablePSNR) {
     Write-Host ""
-    Write-Host "ERROR: At least one quality metric must be enabled in lib/quality_analyzer_config.ps1" -ForegroundColor Red
+    Write-Host "ERROR: At least one quality metric must be enabled in config/quality_analyzer_config.ps1" -ForegroundColor Red
     Write-Host "Please enable VMAF, SSIM, or PSNR and try again." -ForegroundColor Yellow
     Write-Host ""
     exit 1
