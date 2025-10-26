@@ -4,11 +4,58 @@
 # Helper functions for video conversion operations
 # These functions are used by convert_videos.ps1
 
+function Get-VideoBitDepth {
+    param([string]$FilePath)
+
+    # Suppress ffprobe output except what we need
+    $ffprobeCommonArgs = '-v', 'error', '-select_streams', 'v:0', '-of', 'default=nw=1:nk=1'
+
+    # 1️⃣ Try direct bit depth field
+    $BitDepthRaw = ffprobe @ffprobeCommonArgs -show_entries stream=bits_per_raw_sample "$FilePath" 2>$null
+    $BitDepthRaw = $BitDepthRaw.Trim()
+
+    if ([int]::TryParse($BitDepthRaw, [ref]$null)) {
+        return [int]$BitDepthRaw
+    }
+
+    # 2️⃣ Check pixel format
+    $PixFmt = ffprobe @ffprobeCommonArgs -show_entries stream=pix_fmt "$FilePath" 2>$null
+    $PixFmt = $PixFmt.Trim().ToLower()
+
+    if ($PixFmt -match '10(le|be)?$' -or $PixFmt -match 'p010|yuv420p10|yuv422p10|yuv444p10') {
+        return 10
+    }
+    elseif ($PixFmt -match '12(le|be)?$' -or $PixFmt -match 'p012|yuv420p12|yuv422p12|yuv444p12') {
+        return 12
+    }
+    elseif ($PixFmt -match '16(le|be)?$' -or $PixFmt -match 'p016|yuv420p16|yuv422p16|yuv444p16') {
+        return 16
+    }
+
+    # 3️⃣ Fallback: infer from codec name
+    $CodecName = ffprobe @ffprobeCommonArgs -show_entries stream=codec_name "$FilePath" 2>$null
+    $CodecName = $CodecName.Trim().ToLower()
+
+    switch -regex ($CodecName) {
+        'prores'   { return 10 }  # All ProRes variants are 10-bit
+        'dnxhr'    { return 10 }  # DNxHR HQ, HQX often 10-bit
+        'hevc'     { return 10 }  # Many HEVC sources are 10-bit, but not guaranteed
+        'av1'      { return 10 }  # AV1 10-bit common for HDR
+        'vp9'      { return 10 }  # VP9 Profile 2 often 10-bit
+        default    { return 8 }   # safe fallback
+    }
+}
+
+
 # Function to get video metadata using ffprobe
 function Get-VideoMetadata {
     param([string]$FilePath)
 
     try {
+
+        # Get bit depth from ffprobe
+        $SourceBitDepth = Get-VideoBitDepth $FilePath
+
         # Get resolution (TS/M2TS files may return multiple lines, so take first non-empty line)
         $WidthRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
         $WidthOutput = if ($WidthRaw) { $WidthRaw.Trim().TrimEnd(',') } else { "" }
@@ -97,6 +144,8 @@ function Get-VideoMetadata {
             Bitrate = $Bitrate
             BitrateMethod = $BitrateMethod
             Resolution = "${Width}x${Height}"
+            SourceBitDepth = $SourceBitDepth
+            Duration = $Duration
         }
     } catch {
         Write-Host "  Warning: Could not read video metadata - $($_.Exception.Message)" -ForegroundColor Yellow

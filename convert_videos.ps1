@@ -213,6 +213,8 @@ foreach ($File in $VideoFiles) {
         $BufSize = $DynamicParams.BufSize
         $ProfileName = $DynamicParams.ProfileName
         $SourceBitrate = $Metadata.Bitrate
+        $SourceBitDepth = $Metadata.SourceBitDepth
+        $Duration = $Metadata.Duration
 
         # Check if calculated bitrate exceeds source bitrate
         $LimitResult = Limit-BitrateToSource -TargetBitrate $VideoBitrate -MaxRate $MaxRate -BufSize $BufSize -SourceBitrate $SourceBitrate
@@ -221,7 +223,7 @@ foreach ($File in $VideoFiles) {
         $BufSize = $LimitResult.BufSize
 
         Write-Host "[$CurrentFile/$($VideoFiles.Count)] $($File.Name) ($InputSizeMB MB)" -ForegroundColor Cyan
-        Write-Host "  Resolution: $($Metadata.Resolution) @ $($Metadata.FPS)fps | Profile: $ProfileName" -ForegroundColor White
+        Write-Host "  Resolution: $($Metadata.Resolution) @ $($Metadata.FPS)fps ($SourceBitDepth Bit) | Profile: $ProfileName" -ForegroundColor White
 
         if ($LimitResult.Adjusted) {
             $SourceBitrateStr = ConvertTo-BitrateString -BitsPerSecond $SourceBitrate
@@ -366,17 +368,19 @@ foreach ($File in $VideoFiles) {
         )
     }
 
-    # Add video filter based on whether CUDA is available
+    # Determine the format based on source bit depth
     if ($UseCUDA) {
-        # Full GPU pipeline: decode on GPU -> scale/format on GPU -> download to system memory for encoder
-        $FFmpegArgs += @(
-            "-vf", "scale_cuda=format=p010le"
-        )
+        if ($SourceBitDepth -eq 10) {
+            $FFmpegArgs += @("-vf", "scale_cuda=format=p010le")
+        } else {
+            $FFmpegArgs += @("-vf", "scale_cuda=format=yuv420p")
+        }
     } else {
-        # Software scaling with P010LE format for compatibility
-        $FFmpegArgs += @(
-            "-vf", "scale=format=p010le"
-        )
+        if ($SourceBitDepth -eq 10) {
+            $FFmpegArgs += @("-vf", "scale=format=p010le")
+        } else {
+            $FFmpegArgs += @("-vf", "scale=format=yuv420p")
+        }
     }
 
     # Add video encoding parameters

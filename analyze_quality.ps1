@@ -210,7 +210,7 @@ function Compare-VideoQuality {
             for ($i = 0; $i -lt $splitCount; $i++) {
                 $filterString += ";"
                 if ($EnableVMAF -and $i -eq 0) {
-                    $filterString += "[dist0][ref0]libvmaf"
+                    $filterString += "[dist0][ref0]libvmaf=n_subsample=$VMAF_Subsample"
                 } elseif ($EnableSSIM -and (($EnableVMAF -and $i -eq 1) -or (-not $EnableVMAF -and $i -eq 0))) {
                     $idx = if ($EnableVMAF) { "1" } else { "0" }
                     $filterString += "[ref${idx}][dist${idx}]ssim"
@@ -234,7 +234,7 @@ function Compare-VideoQuality {
             for ($i = 0; $i -lt $splitCount; $i++) {
                 $filterString += ";"
                 if ($EnableVMAF -and $i -eq 0) {
-                    $filterString += "[dist0][ref0]libvmaf"
+                    $filterString += "[dist0][ref0]libvmaf=n_subsample=$VMAF_Subsample"
                 } elseif ($EnableSSIM -and (($EnableVMAF -and $i -eq 1) -or (-not $EnableVMAF -and $i -eq 0))) {
                     $idx = if ($EnableVMAF) { "1" } else { "0" }
                     $filterString += "[ref${idx}][dist${idx}]ssim"
