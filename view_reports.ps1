@@ -64,13 +64,10 @@ function Show-FormattedReport {
         Write-Host " | " -NoNewline -ForegroundColor DarkGray
         Write-Host "$($row.SourceBitrateMbps)->$($row.EncodedBitrateMbps)Mbps" -ForegroundColor Gray
 
-        # Line 3: Quality metrics
-        Write-Host "  VMAF: " -NoNewline -ForegroundColor White
-        Write-Host "$($row.VMAF)" -NoNewline -ForegroundColor $qualityColor
-        Write-Host " | SSIM: " -NoNewline -ForegroundColor White
+        # Line 3: Quality metric
+        Write-Host "  SSIM: " -NoNewline -ForegroundColor White
         Write-Host "$($row.SSIM)" -NoNewline -ForegroundColor $qualityColor
-        Write-Host " | PSNR: " -NoNewline -ForegroundColor White
-        Write-Host "$($row.PSNR)dB" -NoNewline -ForegroundColor $qualityColor
+        Write-Host " / 1.00" -NoNewline -ForegroundColor $qualityColor
         Write-Host " | " -NoNewline -ForegroundColor DarkGray
         Write-Host "Analysis: $($row.AnalysisTimeSeconds)s" -ForegroundColor DarkGray
 
@@ -81,9 +78,7 @@ function Show-FormattedReport {
     }
 
     # Calculate summary statistics
-    $avgVMAF = [math]::Round(($reportData | ForEach-Object { [double]$_.VMAF } | Measure-Object -Average).Average, 2)
     $avgSSIM = [math]::Round(($reportData | ForEach-Object { [double]$_.SSIM } | Measure-Object -Average).Average, 4)
-    $avgPSNR = [math]::Round(($reportData | ForEach-Object { [double]$_.PSNR } | Measure-Object -Average).Average, 2)
     $avgCompression = [math]::Round(($reportData | ForEach-Object { [double]$_.CompressionRatio } | Measure-Object -Average).Average, 2)
     $avgSpaceSaved = [math]::Round(($reportData | ForEach-Object { [double]$_.SpaceSavedPercent } | Measure-Object -Average).Average, 1)
     $totalAnalysisTime = [math]::Round(($reportData | ForEach-Object { [double]$_.AnalysisTimeSeconds } | Measure-Object -Sum).Sum, 1)
@@ -93,6 +88,34 @@ function Show-FormattedReport {
     $acceptableCount = ($reportData | Where-Object { $_.QualityAssessment -eq "Acceptable" }).Count
     $poorCount = ($reportData | Where-Object { $_.QualityAssessment -eq "Poor" }).Count
 
+    # Display summary
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "  SUMMARY" -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "Files Compared:       $($reportData.Count)" -ForegroundColor White
+    Write-Host "Total Analysis Time:  $totalAnalysisTime seconds" -ForegroundColor White
+    Write-Host ""
+    Write-Host "Average Quality Metric:" -ForegroundColor White
+    Write-Host "  SSIM: " -NoNewline -ForegroundColor White
+    Write-Host "$avgSSIM / 1.00" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "Average Compression:  ${avgCompression}x (${avgSpaceSaved}% space saved)" -ForegroundColor White
+    Write-Host ""
+    Write-Host "Quality Distribution:" -ForegroundColor White
+    if ($excellentCount -gt 0) {
+        Write-Host "  Excellent:   $excellentCount" -ForegroundColor Green
+    }
+    if ($veryGoodCount -gt 0) {
+        Write-Host "  Very Good:   $veryGoodCount" -ForegroundColor Cyan
+    }
+    if ($acceptableCount -gt 0) {
+        Write-Host "  Acceptable:  $acceptableCount" -ForegroundColor Yellow
+    }
+    if ($poorCount -gt 0) {
+        Write-Host "  Poor:        $poorCount" -ForegroundColor Red
+    }
     Write-Host ""
 }
 
@@ -180,10 +203,8 @@ if ($jsonFiles.Count -eq 1) {
                 Write-Output "  Bitrate: $($row.SourceBitrateMbps) Mbps -> $($row.EncodedBitrateMbps) Mbps"
                 Write-Output "  Duration: $($row.DurationSeconds)s | Analysis Time: $($row.AnalysisTimeSeconds)s"
                 Write-Output ""
-                Write-Output "  Quality Metrics:"
-                Write-Output "    VMAF: $($row.VMAF) / 100"
+                Write-Output "  Quality Metric:"
                 Write-Output "    SSIM: $($row.SSIM) / 1.00"
-                Write-Output "    PSNR: $($row.PSNR) dB"
                 Write-Output "  Assessment: $($row.QualityAssessment)"
                 Write-Output ""
                 if ($fileNumber -lt $reportData.Count) {
@@ -230,15 +251,15 @@ Write-Host ""
 $selection = $null
 while ($true) {
     Write-Host "Select a report [1-$($jsonFiles.Count)] or 'Q' to quit: " -NoNewline -ForegroundColor Yellow
-    $input = Read-Host
+    $userInput = Read-Host
 
-    if ($input -eq 'Q' -or $input -eq 'q') {
+    if ($userInput -eq 'Q' -or $userInput -eq 'q') {
         Write-Host "`nExiting...`n" -ForegroundColor Gray
         exit 0
     }
 
-    if ($input -match '^\d+$') {
-        $selection = [int]$input
+    if ($userInput -match '^\d+$') {
+        $selection = [int]$userInput
         if ($selection -ge 1 -and $selection -le $jsonFiles.Count) {
             break
         }
@@ -307,10 +328,8 @@ while ($true) {
             Write-Output "  Bitrate: $($row.SourceBitrateMbps) Mbps -> $($row.EncodedBitrateMbps) Mbps"
             Write-Output "  Duration: $($row.DurationSeconds)s | Analysis Time: $($row.AnalysisTimeSeconds)s"
             Write-Output ""
-            Write-Output "  Quality Metrics:"
-            Write-Output "    VMAF: $($row.VMAF) / 100"
+            Write-Output "  Quality Metric:"
             Write-Output "    SSIM: $($row.SSIM) / 1.00"
-            Write-Output "    PSNR: $($row.PSNR) dB"
             Write-Output "  Assessment: $($row.QualityAssessment)"
             Write-Output ""
             if ($fileNumber -lt $reportData.Count) {

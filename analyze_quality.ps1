@@ -2,9 +2,9 @@
 # VIDEO QUALITY COMPARISON SCRIPT
 # ============================================================================
 # Compares visual quality between source videos (_input_files) and
-# re-encoded videos (_output_files) using VMAF, SSIM, and PSNR metrics
+# re-encoded videos (_output_files) using SSIM metric
 #
-# Requires: ffmpeg with libvmaf support
+# Requires: ffmpeg
 
 # Configuration
 $InputDir = ".\_input_files"
@@ -16,20 +16,7 @@ $ReportFile = Join-Path $ReportDir "quality_comparison_$Timestamp.json"
 # Supported extensions for matching
 $VideoExtensions = @(".mp4", ".mov", ".mkv", ".wmv", ".avi", ".ts", ".m2ts", ".m4v", ".webm", ".flv", ".3gp")
 
-# Performance tuning
-# Auto-detect CPU threads and use 80% (leave 20% for system responsiveness)
-$TotalThreads = [int]$env:NUMBER_OF_PROCESSORS
-$VMAF_Threads = [Math]::Max(1, [Math]::Floor($TotalThreads * 1))  # Use 80% of threads, minimum 1
-# $VMAF_Threads = 20
-
-$VMAF_Subsample = 30              # Analyze every Nth frame (1=all frames, 2=every other frame, etc.)
-                                 # Higher values = much faster but less accurate
-                                 # Recommended: 1 for final analysis, 4-8 for quick checks
-
-# Quality thresholds for color-coded output
-$VMAF_Excellent = 95
-$VMAF_Good = 90
-$VMAF_Acceptable = 85
+# Quality thresholds for color-coded output (SSIM only)
 $SSIM_Excellent = 0.98
 $SSIM_Good = 0.95
 $SSIM_Acceptable = 0.90
@@ -160,15 +147,12 @@ function Get-VideoMetadata {
 function Compare-VideoQuality {
     param(
         [string]$SourcePath,
-        [string]$EncodedPath,
-        [double]$Duration
+        [string]$EncodedPath
     )
 
-    Write-Host "  Analyzing quality..." -ForegroundColor Yellow
+    Write-Host "  Analyzing quality (SSIM)..." -ForegroundColor Yellow
 
-    # VMAF requires scaling videos to same resolution
-    # We'll scale the source to match encoded if they differ
-
+    # Scale videos to same resolution if needed
     $sourceInfo = Get-VideoMetadata -FilePath $SourcePath
     $encodedInfo = Get-VideoMetadata -FilePath $EncodedPath
 
@@ -176,66 +160,18 @@ function Compare-VideoQuality {
         return $null
     }
 
-    # Build ffmpeg filter for quality comparison
-    # Using VMAF (libvmaf filter) and SSIM/PSNR (separate filters)
-
     $scalingNeeded = ($sourceInfo.Width -ne $encodedInfo.Width -or $sourceInfo.Height -ne $encodedInfo.Height)
-
-    # Note: Running VMAF, SSIM, and PSNR separately as some libvmaf versions don't support combined metrics
-    # We'll run VMAF first
-
-    # Build VMAF filter with performance options
-    $vmafOptions = "log_fmt=json:log_path=NUL:n_threads=$VMAF_Threads"
-    # $vmafOptions = "log_fmt=json:log_path=NUL"
-
-    # Add subsampling for faster analysis (analyze every Nth frame)
-    if ($VMAF_Subsample -gt 1) {
-        $vmafOptions += ":n_subsample=$VMAF_Subsample"
-        Write-Host "  Note: Analyzing every $VMAF_Subsample frame(s) for speed" -ForegroundColor DarkGray
-    }
-
-    if ($scalingNeeded) {
-        # Scale source to match encoded resolution
-        $filter = "[0:v]scale=$($encodedInfo.Width):$($encodedInfo.Height):flags=bicubic[ref];[ref][1:v]libvmaf=$vmafOptions"
-        Write-Host "  Note: Scaling source video to match encoded resolution" -ForegroundColor DarkGray
-    } else {
-        # No scaling needed
-        $filter = "[0:v][1:v]libvmaf=$vmafOptions"
-    }
-
-    # Run ffmpeg to calculate VMAF
-    $ffmpegArgs = @(
-        "-i", $SourcePath,
-        "-i", $EncodedPath,
-        "-lavfi", $filter,
-        "-f", "null",
-        "-"
-    )
 
     try {
         $startTime = Get-Date
-        Write-Host "  VMAF: " -NoNewline -ForegroundColor Cyan
-
-        Write-Host "Analyzing..." -NoNewline -ForegroundColor Yellow
-
-        # Run ffmpeg directly, capturing stderr for parsing
-        $vmafOutput = & ffmpeg @ffmpegArgs 2>&1 | Out-String
-
-        Write-Host "`rVMAF: Done        " -ForegroundColor Green
-
-        # Parse VMAF score
-        $vmaf = $null
-        if ($vmafOutput -match "VMAF score:\s+([\d.]+)") {
-            $vmaf = [math]::Round([double]$Matches[1], 2)
-        }
-
-        # Now run SSIM calculation with simple approach (working but no progress tracking)
         Write-Host "  SSIM: " -NoNewline -ForegroundColor Cyan
 
         $ssimFilter = if ($scalingNeeded) {
             "[0:v]scale=$($encodedInfo.Width):$($encodedInfo.Height):flags=bicubic[ref];[ref][1:v]ssim"
+            Write-Host "Analyzing (scaling needed)..." -NoNewline -ForegroundColor Yellow
         } else {
             "[0:v][1:v]ssim"
+            Write-Host "Analyzing..." -NoNewline -ForegroundColor Yellow
         }
 
         $ssimArgs = @(
@@ -246,67 +182,26 @@ function Compare-VideoQuality {
             "-"
         )
 
-        Write-Host "Analyzing..." -NoNewline -ForegroundColor Yellow
-
-        # Run ffmpeg directly like the original script does, capturing stderr for parsing
+        # Run ffmpeg and capture output
         $ssimOutput = & ffmpeg @ssimArgs 2>&1 | Out-String
 
         Write-Host "`rSSIM: Done        " -ForegroundColor Green
 
-        # Parse SSIM - ensure the regex captures the right value
+        # Parse SSIM value
         $ssim = $null
         if ($ssimOutput -match "All:\s*([\d.]+)") {
             $ssim = [math]::Round([double]$Matches[1], 4)
         }
 
-        # Now run PSNR calculation with simple approach
-        Write-Host "  PSNR: " -NoNewline -ForegroundColor Cyan
-
-        $psnrFilter = if ($scalingNeeded) {
-            "[0:v]scale=$($encodedInfo.Width):$($encodedInfo.Height):flags=bicubic[ref];[ref][1:v]psnr"
-        } else {
-            "[0:v][1:v]psnr"
-        }
-
-        $psnrArgs = @(
-            "-i", $SourcePath,
-            "-i", $EncodedPath,
-            "-lavfi", $psnrFilter,
-            "-f", "null",
-            "-"
-        )
-
-        Write-Host "Analyzing..." -NoNewline -ForegroundColor Yellow
-
-        # Run ffmpeg directly like the original script does, capturing stderr for parsing
-        $psnrOutput = & ffmpeg @psnrArgs 2>&1 | Out-String
-
-        Write-Host "`rPSNR: Done        " -ForegroundColor Green
-
-        # Parse PSNR - ensure the regex captures the right value
-        $psnr = $null
-        if ($psnrOutput -match "average:\s*([\d.]+)") {
-            $psnr = [math]::Round([double]$Matches[1], 2)
-        }
-
-        # Parse PSNR
-        $psnr = $null
-        if ($psnrOutput -match "average:([\d.]+)") {
-            $psnr = [math]::Round([double]$Matches[1], 2)
-        }
-
         $elapsedTime = ((Get-Date) - $startTime).TotalSeconds
 
         # If parsing failed, show warning
-        if (-not $vmaf -or -not $ssim -or -not $psnr) {
-            Write-Host "`n  Warning: Some metrics could not be parsed" -ForegroundColor Yellow
-            Write-Host "  VMAF: $vmaf | SSIM: $ssim | PSNR: $psnr" -ForegroundColor DarkGray
+        if (-not $ssim) {
+            Write-Host "`n  Warning: SSIM metric could not be parsed" -ForegroundColor Yellow
         }
 
         return @{
-            VMAF = $vmaf
             SSIM = $ssim
-            PSNR = $psnr
             SourceInfo = $sourceInfo
             EncodedInfo = $encodedInfo
             AnalysisTime = $elapsedTime
@@ -319,15 +214,14 @@ function Compare-VideoQuality {
 
 function Get-QualityColor {
     param(
-        [double]$VMAF,
         [double]$SSIM
     )
 
-    if ($VMAF -ge $VMAF_Excellent -and $SSIM -ge $SSIM_Excellent) {
+    if ($SSIM -ge $SSIM_Excellent) {
         return "Green"
-    } elseif ($VMAF -ge $VMAF_Good -and $SSIM -ge $SSIM_Good) {
+    } elseif ($SSIM -ge $SSIM_Good) {
         return "Cyan"
-    } elseif ($VMAF -ge $VMAF_Acceptable -and $SSIM -ge $SSIM_Acceptable) {
+    } elseif ($SSIM -ge $SSIM_Acceptable) {
         return "Yellow"
     } else {
         return "Red"
@@ -347,17 +241,16 @@ if (-not (Test-Path $ReportDir)) {
     New-Item -ItemType Directory -Path $ReportDir | Out-Null
 }
 
-# Check if ffmpeg has libvmaf support
-Write-Host "`nChecking for ffmpeg libvmaf support..." -ForegroundColor Yellow
-$ffmpegFilters = & ffmpeg -filters 2>&1 | Out-String
-if ($ffmpegFilters -notmatch "libvmaf") {
-    Write-Host "ERROR: ffmpeg does not have libvmaf support!" -ForegroundColor Red
-    Write-Host "Please install ffmpeg with libvmaf enabled." -ForegroundColor Yellow
-    Write-Host "You can download it from: https://github.com/BtbN/FFmpeg-Builds/releases" -ForegroundColor Yellow
-    Write-Host "(Look for 'gpl' builds which include libvmaf)`n" -ForegroundColor Yellow
+# Check if ffmpeg is available
+Write-Host "`nChecking for ffmpeg..." -ForegroundColor Yellow
+try {
+    $ffmpegVersion = & ffmpeg -version 2>&1 | Select-Object -First 1
+    Write-Host "ffmpeg detected: $ffmpegVersion" -ForegroundColor Green
+} catch {
+    Write-Host "ERROR: ffmpeg not found!" -ForegroundColor Red
+    Write-Host "Please install ffmpeg and add it to your PATH.`n" -ForegroundColor Yellow
     exit 1
 }
-Write-Host "libvmaf support detected!" -ForegroundColor Green
 
 # Get all files from input directory
 $inputFiles = @()
@@ -388,7 +281,6 @@ Write-Host ""
 
 # Initialize report data
 $reportData = @()
-$comparisons = 0
 $currentComparison = 0
 
 # Match output files with input files (iterate through output files)
@@ -428,19 +320,8 @@ if ($matchedPairs.Count -eq 0) {
 
 Write-Host "Found $($matchedPairs.Count) matching pair(s) to compare" -ForegroundColor Green
 Write-Host ""
-Write-Host "Performance Settings:" -ForegroundColor Yellow
-Write-Host "  CPU Threads Available: $TotalThreads" -ForegroundColor DarkGray
-Write-Host "  VMAF Threads: $VMAF_Threads" -ForegroundColor White
-Write-Host "  Frame Sampling: " -NoNewline -ForegroundColor White
-if ($VMAF_Subsample -eq 1) {
-    Write-Host "Every frame (full quality, slower)" -ForegroundColor Cyan
-} else {
-    Write-Host "Every $VMAF_Subsample frames (faster, slightly less accurate)" -ForegroundColor Yellow
-}
-Write-Host ""
-Write-Host "Note: Quality analysis takes 1-5x video duration" -ForegroundColor DarkGray
-Write-Host "      Analysis uses CPU only (no GPU acceleration)" -ForegroundColor DarkGray
-Write-Host "      Tip: Set `$VMAF_Subsample=4 in script for 4x faster preview" -ForegroundColor DarkGray
+Write-Host "Note: Quality analysis uses SSIM (Structural Similarity Index)" -ForegroundColor DarkGray
+Write-Host "      Analysis takes 1-3x video duration (CPU only)" -ForegroundColor DarkGray
 Write-Host ""
 Write-Host "========================================`n" -ForegroundColor Cyan
 
@@ -472,32 +353,26 @@ foreach ($pair in $matchedPairs) {
     Write-Host "  Duration: $($sourceInfo.Duration)s" -ForegroundColor Gray
 
     # Compare quality
-    $result = Compare-VideoQuality -SourcePath $pair.Source.FullName -EncodedPath $pair.Encoded.FullName -Duration $sourceInfo.Duration
+    $result = Compare-VideoQuality -SourcePath $pair.Source.FullName -EncodedPath $pair.Encoded.FullName
 
-    if ($result -and $result.VMAF -ne $null -and $result.SSIM -ne $null -and $result.PSNR -ne $null) {
-        $qualityColor = Get-QualityColor -VMAF $result.VMAF -SSIM $result.SSIM
+    if ($result -and $null -ne $result.SSIM) {
+        $qualityColor = Get-QualityColor -SSIM $result.SSIM
 
         Write-Host ""
-        Write-Host "  +-- Quality Metrics ---------------------+" -ForegroundColor DarkGray
-        Write-Host "  | VMAF: " -NoNewline -ForegroundColor White
-        Write-Host "$($result.VMAF.ToString().PadRight(5)) / 100" -NoNewline -ForegroundColor $qualityColor
-        Write-Host "                  |" -ForegroundColor DarkGray
+        Write-Host "  +-- Quality Metric ----------------------+" -ForegroundColor DarkGray
         Write-Host "  | SSIM: " -NoNewline -ForegroundColor White
         Write-Host "$($result.SSIM.ToString().PadRight(6)) / 1.00" -NoNewline -ForegroundColor $qualityColor
         Write-Host "                 |" -ForegroundColor DarkGray
-        Write-Host "  | PSNR: " -NoNewline -ForegroundColor White
-        Write-Host "$($result.PSNR.ToString().PadRight(5)) dB" -NoNewline -ForegroundColor $qualityColor
-        Write-Host "                      |" -ForegroundColor DarkGray
         Write-Host "  +-----------------------------------------+" -ForegroundColor DarkGray
 
-        # Quality assessment
-        if ($result.VMAF -ge $VMAF_Excellent -and $result.SSIM -ge $SSIM_Excellent) {
+        # Quality assessment based on SSIM only
+        if ($result.SSIM -ge $SSIM_Excellent) {
             Write-Host "  Result: " -NoNewline -ForegroundColor White
             Write-Host "Excellent quality (visually lossless)" -ForegroundColor Green
-        } elseif ($result.VMAF -ge $VMAF_Good -and $result.SSIM -ge $SSIM_Good) {
+        } elseif ($result.SSIM -ge $SSIM_Good) {
             Write-Host "  Result: " -NoNewline -ForegroundColor White
             Write-Host "Very good quality (minimal artifacts)" -ForegroundColor Cyan
-        } elseif ($result.VMAF -ge $VMAF_Acceptable -and $result.SSIM -ge $SSIM_Acceptable) {
+        } elseif ($result.SSIM -ge $SSIM_Acceptable) {
             Write-Host "  Result: " -NoNewline -ForegroundColor White
             Write-Host "Acceptable quality" -ForegroundColor Yellow
         } else {
@@ -520,14 +395,12 @@ foreach ($pair in $matchedPairs) {
             EncodedBitrateMbps = [math]::Round($encodedInfo.Bitrate / 1000000, 2)
             DurationSeconds = $sourceInfo.Duration
             AnalysisTimeSeconds = [math]::Round($result.AnalysisTime, 1)
-            VMAF = $result.VMAF
             SSIM = $result.SSIM
-            PSNR = $result.PSNR
-            QualityAssessment = if ($result.VMAF -ge $VMAF_Excellent) { "Excellent" } elseif ($result.VMAF -ge $VMAF_Good) { "Very Good" } elseif ($result.VMAF -ge $VMAF_Acceptable) { "Acceptable" } else { "Poor" }
+            QualityAssessment = if ($result.SSIM -ge $SSIM_Excellent) { "Excellent" } elseif ($result.SSIM -ge $SSIM_Good) { "Very Good" } elseif ($result.SSIM -ge $SSIM_Acceptable) { "Acceptable" } else { "Poor" }
         }
     } elseif ($result) {
         Write-Host ""
-        Write-Host "  Quality analysis incomplete (some metrics failed to parse)" -ForegroundColor Yellow
+        Write-Host "  Quality analysis incomplete (metric failed to parse)" -ForegroundColor Yellow
     } else {
         Write-Host ""
         Write-Host "  Quality analysis failed" -ForegroundColor Red
@@ -556,9 +429,7 @@ if ($reportData.Count -gt 0) {
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
 
-    $avgVMAF = [math]::Round(($reportData | Measure-Object -Property VMAF -Average).Average, 2)
     $avgSSIM = [math]::Round(($reportData | Measure-Object -Property SSIM -Average).Average, 4)
-    $avgPSNR = [math]::Round(($reportData | Measure-Object -Property PSNR -Average).Average, 2)
     $avgCompression = [math]::Round(($reportData | Measure-Object -Property CompressionRatio -Average).Average, 2)
     $avgSpaceSaved = [math]::Round(($reportData | Measure-Object -Property SpaceSavedPercent -Average).Average, 1)
     $totalAnalysisTime = [math]::Round(($reportData | Measure-Object -Property AnalysisTimeSeconds -Sum).Sum, 1)
@@ -571,13 +442,9 @@ if ($reportData.Count -gt 0) {
     Write-Host "Files Compared:       $($reportData.Count)" -ForegroundColor White
     Write-Host "Total Analysis Time:  $totalAnalysisTime seconds" -ForegroundColor White
     Write-Host ""
-    Write-Host "Average Metrics:" -ForegroundColor White
-    Write-Host "  VMAF: " -NoNewline -ForegroundColor White
-    Write-Host "$avgVMAF / 100" -ForegroundColor Cyan
+    Write-Host "Average Quality Metric:" -ForegroundColor White
     Write-Host "  SSIM: " -NoNewline -ForegroundColor White
     Write-Host "$avgSSIM / 1.00" -ForegroundColor Cyan
-    Write-Host "  PSNR: " -NoNewline -ForegroundColor White
-    Write-Host "$avgPSNR dB" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "Average Compression:  ${avgCompression}x (${avgSpaceSaved}% space saved)" -ForegroundColor White
     Write-Host ""

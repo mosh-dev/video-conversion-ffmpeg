@@ -112,12 +112,10 @@ Default values are loaded from `config.ps1` and can be adjusted before starting 
 .\analyze_quality.ps1
 ```
 
-The quality validation script validates re-encoded video quality using industry-standard metrics:
+The quality validation script validates re-encoded video quality using the SSIM (Structural Similarity Index) metric:
 
-**Metrics Used:**
-- **VMAF** (Video Multimethod Assessment Fusion) - Netflix's perceptual quality metric (0-100 scale)
-- **SSIM** (Structural Similarity Index) - Structural similarity metric (0-1 scale)
-- **PSNR** (Peak Signal-to-Noise Ratio) - Simple quality metric (dB scale)
+**Metric Used:**
+- **SSIM** (Structural Similarity Index) - Measures structural similarity between source and encoded video (0-1 scale)
 
 **Features:**
 - Automatic file matching between `input_files/` and `output_files/` directories
@@ -126,22 +124,20 @@ The quality validation script validates re-encoded video quality using industry-
 - JSON report generation in `reports/` directory
 - Comprehensive statistics: compression ratio, bitrate comparison, quality distribution
 
-**Quality Thresholds:**
-- Excellent: VMAF ≥ 95, SSIM ≥ 0.98
-- Very Good: VMAF ≥ 90, SSIM ≥ 0.95
-- Acceptable: VMAF ≥ 85, SSIM ≥ 0.90
-- Poor: Below acceptable thresholds
+**Quality Thresholds (SSIM-based):**
+- Excellent: SSIM ≥ 0.98 (visually lossless)
+- Very Good: SSIM ≥ 0.95 (minimal artifacts)
+- Acceptable: SSIM ≥ 0.90
+- Poor: SSIM < 0.90
 
 **Requirements:**
-- ffmpeg with libvmaf support (GPL builds from BtbN/FFmpeg-Builds)
-- Check availability: `ffmpeg -filters 2>&1 | Select-String libvmaf`
+- ffmpeg (standard builds work - no special plugins required)
 
 **Performance:**
-- Quality analysis is CPU-intensive and slow (1-5x video duration)
-- Uses 4 threads by default (configurable in script)
+- Quality analysis is CPU-intensive (1-3x video duration)
 - No GPU acceleration available for quality metrics
 - Scales videos to matching resolution if needed for comparison
-- Runs three separate passes (VMAF, SSIM, PSNR) for compatibility
+- Single-pass SSIM analysis for faster results compared to multi-metric tools
 
 ## Report Viewer Tool
 
