@@ -64,12 +64,46 @@ function Show-FormattedReport {
         Write-Host " | " -NoNewline -ForegroundColor DarkGray
         Write-Host "$($row.SourceBitrateMbps)->$($row.EncodedBitrateMbps)Mbps" -ForegroundColor Gray
 
-        # Line 3: Quality metric
-        Write-Host "  SSIM: " -NoNewline -ForegroundColor White
-        Write-Host "$($row.SSIM)" -NoNewline -ForegroundColor $qualityColor
-        Write-Host " / 1.00" -NoNewline -ForegroundColor $qualityColor
+        # Line 3: Quality metrics (show all available metrics)
+        Write-Host "  " -NoNewline
+        $metricsShown = @()
+
+        if ($null -ne $row.VMAF) {
+            Write-Host "VMAF: " -NoNewline -ForegroundColor White
+            Write-Host "$($row.VMAF)" -NoNewline -ForegroundColor $qualityColor
+            Write-Host "/100" -NoNewline -ForegroundColor $qualityColor
+            $metricsShown += "VMAF"
+        }
+
+        if ($null -ne $row.SSIM) {
+            if ($metricsShown.Count -gt 0) {
+                Write-Host " | " -NoNewline -ForegroundColor DarkGray
+            }
+            Write-Host "SSIM: " -NoNewline -ForegroundColor White
+            Write-Host "$($row.SSIM)" -NoNewline -ForegroundColor $qualityColor
+            Write-Host "/1.00" -NoNewline -ForegroundColor $qualityColor
+            $metricsShown += "SSIM"
+        }
+
+        if ($null -ne $row.PSNR) {
+            if ($metricsShown.Count -gt 0) {
+                Write-Host " | " -NoNewline -ForegroundColor DarkGray
+            }
+            Write-Host "PSNR: " -NoNewline -ForegroundColor White
+            Write-Host "$($row.PSNR)" -NoNewline -ForegroundColor $qualityColor
+            Write-Host "dB" -NoNewline -ForegroundColor $qualityColor
+            $metricsShown += "PSNR"
+        }
+
         Write-Host " | " -NoNewline -ForegroundColor DarkGray
         Write-Host "Analysis: $($row.AnalysisTimeSeconds)s" -ForegroundColor DarkGray
+
+        # Show primary metric if available
+        if ($null -ne $row.PrimaryMetric) {
+            Write-Host "  (Assessment based on: " -NoNewline -ForegroundColor DarkGray
+            Write-Host "$($row.PrimaryMetric)" -NoNewline -ForegroundColor White
+            Write-Host ")" -ForegroundColor DarkGray
+        }
 
         # Add separator between files (except for last one)
         if ($fileNumber -lt $reportData.Count) {
@@ -78,7 +112,6 @@ function Show-FormattedReport {
     }
 
     # Calculate summary statistics
-    $avgSSIM = [math]::Round(($reportData | ForEach-Object { [double]$_.SSIM } | Measure-Object -Average).Average, 4)
     $avgCompression = [math]::Round(($reportData | ForEach-Object { [double]$_.CompressionRatio } | Measure-Object -Average).Average, 2)
     $avgSpaceSaved = [math]::Round(($reportData | ForEach-Object { [double]$_.SpaceSavedPercent } | Measure-Object -Average).Average, 1)
     $totalAnalysisTime = [math]::Round(($reportData | ForEach-Object { [double]$_.AnalysisTimeSeconds } | Measure-Object -Sum).Sum, 1)
@@ -87,6 +120,11 @@ function Show-FormattedReport {
     $veryGoodCount = ($reportData | Where-Object { $_.QualityAssessment -eq "Very Good" }).Count
     $acceptableCount = ($reportData | Where-Object { $_.QualityAssessment -eq "Acceptable" }).Count
     $poorCount = ($reportData | Where-Object { $_.QualityAssessment -eq "Poor" }).Count
+
+    # Calculate average for each metric if present
+    $hasVMAF = $reportData | Where-Object { $null -ne $_.VMAF } | Select-Object -First 1
+    $hasSSIM = $reportData | Where-Object { $null -ne $_.SSIM } | Select-Object -First 1
+    $hasPSNR = $reportData | Where-Object { $null -ne $_.PSNR } | Select-Object -First 1
 
     # Display summary
     Write-Host ""
@@ -97,13 +135,45 @@ function Show-FormattedReport {
     Write-Host "Files Compared:       $($reportData.Count)" -ForegroundColor White
     Write-Host "Total Analysis Time:  $totalAnalysisTime seconds" -ForegroundColor White
     Write-Host ""
-    Write-Host "Average Quality Metric:" -ForegroundColor White
-    Write-Host "  SSIM: " -NoNewline -ForegroundColor White
-    Write-Host "$avgSSIM / 1.00" -ForegroundColor Cyan
+    Write-Host "Average Quality Metrics:" -ForegroundColor White
+
+    if ($hasVMAF) {
+        $avgVMAF = [math]::Round(($reportData | Where-Object { $null -ne $_.VMAF } | ForEach-Object { [double]$_.VMAF } | Measure-Object -Average).Average, 2)
+        Write-Host "  VMAF: " -NoNewline -ForegroundColor White
+        Write-Host "$avgVMAF / 100" -ForegroundColor Cyan
+    }
+
+    if ($hasSSIM) {
+        $avgSSIM = [math]::Round(($reportData | Where-Object { $null -ne $_.SSIM } | ForEach-Object { [double]$_.SSIM } | Measure-Object -Average).Average, 4)
+        Write-Host "  SSIM: " -NoNewline -ForegroundColor White
+        Write-Host "$avgSSIM / 1.00" -ForegroundColor Cyan
+    }
+
+    if ($hasPSNR) {
+        $avgPSNR = [math]::Round(($reportData | Where-Object { $null -ne $_.PSNR } | ForEach-Object { [double]$_.PSNR } | Measure-Object -Average).Average, 2)
+        Write-Host "  PSNR: " -NoNewline -ForegroundColor White
+        Write-Host "$avgPSNR dB" -ForegroundColor Cyan
+    }
+
+    # Determine primary metric
+    $primaryMetric = $reportData[0].PrimaryMetric
+    if ($null -eq $primaryMetric) {
+        # Fallback for old reports without PrimaryMetric field
+        if ($hasVMAF) { $primaryMetric = "VMAF" }
+        elseif ($hasSSIM) { $primaryMetric = "SSIM" }
+        elseif ($hasPSNR) { $primaryMetric = "PSNR" }
+    }
+
     Write-Host ""
     Write-Host "Average Compression:  ${avgCompression}x (${avgSpaceSaved}% space saved)" -ForegroundColor White
     Write-Host ""
-    Write-Host "Quality Distribution:" -ForegroundColor White
+
+    if ($null -ne $primaryMetric) {
+        Write-Host "Quality Distribution (based on $primaryMetric):" -ForegroundColor White
+    } else {
+        Write-Host "Quality Distribution:" -ForegroundColor White
+    }
+
     if ($excellentCount -gt 0) {
         Write-Host "  Excellent:   $excellentCount" -ForegroundColor Green
     }
@@ -203,9 +273,21 @@ if ($jsonFiles.Count -eq 1) {
                 Write-Output "  Bitrate: $($row.SourceBitrateMbps) Mbps -> $($row.EncodedBitrateMbps) Mbps"
                 Write-Output "  Duration: $($row.DurationSeconds)s | Analysis Time: $($row.AnalysisTimeSeconds)s"
                 Write-Output ""
-                Write-Output "  Quality Metric:"
-                Write-Output "    SSIM: $($row.SSIM) / 1.00"
-                Write-Output "  Assessment: $($row.QualityAssessment)"
+                Write-Output "  Quality Metrics:"
+                if ($null -ne $row.VMAF) {
+                    Write-Output "    VMAF: $($row.VMAF) / 100"
+                }
+                if ($null -ne $row.SSIM) {
+                    Write-Output "    SSIM: $($row.SSIM) / 1.00"
+                }
+                if ($null -ne $row.PSNR) {
+                    Write-Output "    PSNR: $($row.PSNR) dB"
+                }
+                if ($null -ne $row.PrimaryMetric) {
+                    Write-Output "  Assessment: $($row.QualityAssessment) (based on $($row.PrimaryMetric))"
+                } else {
+                    Write-Output "  Assessment: $($row.QualityAssessment)"
+                }
                 Write-Output ""
                 if ($fileNumber -lt $reportData.Count) {
                     Write-Output "----------------------------------------"
@@ -328,9 +410,21 @@ while ($true) {
             Write-Output "  Bitrate: $($row.SourceBitrateMbps) Mbps -> $($row.EncodedBitrateMbps) Mbps"
             Write-Output "  Duration: $($row.DurationSeconds)s | Analysis Time: $($row.AnalysisTimeSeconds)s"
             Write-Output ""
-            Write-Output "  Quality Metric:"
-            Write-Output "    SSIM: $($row.SSIM) / 1.00"
-            Write-Output "  Assessment: $($row.QualityAssessment)"
+            Write-Output "  Quality Metrics:"
+            if ($null -ne $row.VMAF) {
+                Write-Output "    VMAF: $($row.VMAF) / 100"
+            }
+            if ($null -ne $row.SSIM) {
+                Write-Output "    SSIM: $($row.SSIM) / 1.00"
+            }
+            if ($null -ne $row.PSNR) {
+                Write-Output "    PSNR: $($row.PSNR) dB"
+            }
+            if ($null -ne $row.PrimaryMetric) {
+                Write-Output "  Assessment: $($row.QualityAssessment) (based on $($row.PrimaryMetric))"
+            } else {
+                Write-Output "  Assessment: $($row.QualityAssessment)"
+            }
             Write-Output ""
             if ($fileNumber -lt $reportData.Count) {
                 Write-Output "----------------------------------------"

@@ -2,24 +2,25 @@
 # VIDEO QUALITY COMPARISON SCRIPT
 # ============================================================================
 # Compares visual quality between source videos (_input_files) and
-# re-encoded videos (_output_files) using SSIM metric
+# re-encoded videos (_output_files) using VMAF, SSIM, and/or PSNR metrics
 #
 # Requires: ffmpeg
 
+# Import configuration
+. ".\lib\quality_analyzer_config.ps1"
+
+# Validate that at least one metric is enabled
+if (-not $EnableVMAF -and -not $EnableSSIM -and -not $EnablePSNR) {
+    Write-Host ""
+    Write-Host "ERROR: At least one quality metric must be enabled in lib/quality_analyzer_config.ps1" -ForegroundColor Red
+    Write-Host "Please enable VMAF, SSIM, or PSNR and try again." -ForegroundColor Yellow
+    Write-Host ""
+    exit 1
+}
+
 # Configuration
-$InputDir = ".\_input_files"
-$OutputDir = ".\_output_files"
-$ReportDir = ".\reports"
 $Timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
 $ReportFile = Join-Path $ReportDir "quality_comparison_$Timestamp.json"
-
-# Supported extensions for matching
-$VideoExtensions = @(".mp4", ".mov", ".mkv", ".wmv", ".avi", ".ts", ".m2ts", ".m4v", ".webm", ".flv", ".3gp")
-
-# Quality thresholds for color-coded output (SSIM only)
-$SSIM_Excellent = 0.98
-$SSIM_Good = 0.95
-$SSIM_Acceptable = 0.90
 
 # ============================================================================
 # HELPER FUNCTIONS
@@ -150,8 +151,6 @@ function Compare-VideoQuality {
         [string]$EncodedPath
     )
 
-    Write-Host "  Analyzing quality (SSIM)..." -ForegroundColor Yellow
-
     # Scale videos to same resolution if needed
     $sourceInfo = Get-VideoMetadata -FilePath $SourcePath
     $encodedInfo = Get-VideoMetadata -FilePath $EncodedPath
@@ -162,46 +161,142 @@ function Compare-VideoQuality {
 
     $scalingNeeded = ($sourceInfo.Width -ne $encodedInfo.Width -or $sourceInfo.Height -ne $encodedInfo.Height)
 
+    # Build filter chain for all enabled metrics in single pass
+    $filterChain = @()
+
+    # Determine base video streams
+    $refStream = "[0:v]"
+    $distStream = "[1:v]"
+
+    # If scaling needed, scale reference video first
+    if ($scalingNeeded) {
+        $filterChain += "${refStream}scale=$($encodedInfo.Width):$($encodedInfo.Height):flags=bicubic[ref]"
+        $refStream = "[ref]"
+    }
+
+    # Build metric filters
+    if ($EnableVMAF) {
+        $filterChain += "${distStream}${refStream}libvmaf[vmafout]"
+    }
+
+    if ($EnableSSIM) {
+        $filterChain += "${refStream}${distStream}ssim[ssimout]"
+    }
+
+    if ($EnablePSNR) {
+        $filterChain += "${refStream}${distStream}psnr[psnrout]"
+    }
+
+    # If only one metric is enabled, simplify filter chain
+    $filterString = ""
+    if ($filterChain.Count -eq 1) {
+        $filterString = $filterChain[0] -replace '\[.*out\]$', ''
+    } else {
+        # Multiple metrics: split and merge (complex filter graph)
+        $splitCount = $filterChain.Count
+
+        if ($scalingNeeded) {
+            # With scaling: scale first, then split both streams
+            $filterString = "${refStream}scale=$($encodedInfo.Width):$($encodedInfo.Height):flags=bicubic[ref];[ref]split=${splitCount}"
+            for ($i = 0; $i -lt $splitCount; $i++) {
+                $filterString += "[ref$i]"
+            }
+            $filterString += ";${distStream}split=${splitCount}"
+            for ($i = 0; $i -lt $splitCount; $i++) {
+                $filterString += "[dist$i]"
+            }
+
+            # Add metric filters
+            for ($i = 0; $i -lt $splitCount; $i++) {
+                $filterString += ";"
+                if ($EnableVMAF -and $i -eq 0) {
+                    $filterString += "[dist0][ref0]libvmaf"
+                } elseif ($EnableSSIM -and (($EnableVMAF -and $i -eq 1) -or (-not $EnableVMAF -and $i -eq 0))) {
+                    $idx = if ($EnableVMAF) { "1" } else { "0" }
+                    $filterString += "[ref${idx}][dist${idx}]ssim"
+                } elseif ($EnablePSNR) {
+                    $idx = if ($EnableVMAF -and $EnableSSIM) { "2" } elseif ($EnableVMAF -or $EnableSSIM) { "1" } else { "0" }
+                    $filterString += "[ref${idx}][dist${idx}]psnr"
+                }
+            }
+        } else {
+            # No scaling: split both streams directly
+            $filterString = "[0:v]split=${splitCount}"
+            for ($i = 0; $i -lt $splitCount; $i++) {
+                $filterString += "[ref$i]"
+            }
+            $filterString += ";[1:v]split=${splitCount}"
+            for ($i = 0; $i -lt $splitCount; $i++) {
+                $filterString += "[dist$i]"
+            }
+
+            # Add metric filters
+            for ($i = 0; $i -lt $splitCount; $i++) {
+                $filterString += ";"
+                if ($EnableVMAF -and $i -eq 0) {
+                    $filterString += "[dist0][ref0]libvmaf"
+                } elseif ($EnableSSIM -and (($EnableVMAF -and $i -eq 1) -or (-not $EnableVMAF -and $i -eq 0))) {
+                    $idx = if ($EnableVMAF) { "1" } else { "0" }
+                    $filterString += "[ref${idx}][dist${idx}]ssim"
+                } elseif ($EnablePSNR) {
+                    $idx = if ($EnableVMAF -and $EnableSSIM) { "2" } elseif ($EnableVMAF -or $EnableSSIM) { "1" } else { "0" }
+                    $filterString += "[ref${idx}][dist${idx}]psnr"
+                }
+            }
+        }
+    }
+
     try {
         $startTime = Get-Date
-        Write-Host "  SSIM: " -NoNewline -ForegroundColor Cyan
 
-        $ssimFilter = if ($scalingNeeded) {
-            "[0:v]scale=$($encodedInfo.Width):$($encodedInfo.Height):flags=bicubic[ref];[ref][1:v]ssim"
-            Write-Host "Analyzing (scaling needed)..." -NoNewline -ForegroundColor Yellow
-        } else {
-            "[0:v][1:v]ssim"
-            Write-Host "Analyzing..." -NoNewline -ForegroundColor Yellow
+        # Build enabled metrics list
+        $enabledMetrics = @()
+        if ($EnableVMAF) { $enabledMetrics += "VMAF" }
+        if ($EnableSSIM) { $enabledMetrics += "SSIM" }
+        if ($EnablePSNR) { $enabledMetrics += "PSNR" }
+        $metricsText = $enabledMetrics -join ", "
+
+        Write-Host "  Analyzing quality ($metricsText)..." -ForegroundColor Yellow
+        if ($scalingNeeded) {
+            Write-Host "  (Scaling needed: $($sourceInfo.Resolution) -> $($encodedInfo.Resolution))" -ForegroundColor DarkGray
         }
 
-        $ssimArgs = @(
+        $ffmpegArgs = @(
             "-i", $SourcePath,
             "-i", $EncodedPath,
-            "-lavfi", $ssimFilter,
+            "-lavfi", $filterString,
             "-f", "null",
             "-"
         )
 
         # Run ffmpeg and capture output
-        $ssimOutput = & ffmpeg @ssimArgs 2>&1 | Out-String
+        $ffmpegOutput = & ffmpeg @ffmpegArgs 2>&1 | Out-String
 
-        Write-Host "`rSSIM: Done        " -ForegroundColor Green
-
-        # Parse SSIM value
+        # Parse metrics
+        $vmaf = $null
         $ssim = $null
-        if ($ssimOutput -match "All:\s*([\d.]+)") {
+        $psnr = $null
+
+        if ($EnableVMAF -and $ffmpegOutput -match "VMAF score:\s*([\d.]+)") {
+            $vmaf = [math]::Round([double]$Matches[1], 2)
+        }
+
+        if ($EnableSSIM -and $ffmpegOutput -match "All:\s*([\d.]+)\s+\(.*SSIM") {
             $ssim = [math]::Round([double]$Matches[1], 4)
+        }
+
+        if ($EnablePSNR -and $ffmpegOutput -match "average:\s*([\d.]+).*psnr") {
+            $psnr = [math]::Round([double]$Matches[1], 2)
         }
 
         $elapsedTime = ((Get-Date) - $startTime).TotalSeconds
 
-        # If parsing failed, show warning
-        if (-not $ssim) {
-            Write-Host "`n  Warning: SSIM metric could not be parsed" -ForegroundColor Yellow
-        }
+        Write-Host "  Analysis completed in $([math]::Round($elapsedTime, 1))s" -ForegroundColor Green
 
         return @{
+            VMAF = $vmaf
             SSIM = $ssim
+            PSNR = $psnr
             SourceInfo = $sourceInfo
             EncodedInfo = $encodedInfo
             AnalysisTime = $elapsedTime
@@ -212,19 +307,59 @@ function Compare-VideoQuality {
     }
 }
 
-function Get-QualityColor {
-    param(
-        [double]$SSIM
-    )
+function Get-PrimaryMetricValue {
+    param($Result)
 
-    if ($SSIM -ge $SSIM_Excellent) {
-        return "Green"
-    } elseif ($SSIM -ge $SSIM_Good) {
-        return "Cyan"
-    } elseif ($SSIM -ge $SSIM_Acceptable) {
-        return "Yellow"
-    } else {
-        return "Red"
+    # Priority: VMAF > SSIM > PSNR
+    if ($EnableVMAF -and $null -ne $Result.VMAF) {
+        return @{ Value = $Result.VMAF; Name = "VMAF"; Type = "VMAF" }
+    } elseif ($EnableSSIM -and $null -ne $Result.SSIM) {
+        return @{ Value = $Result.SSIM; Name = "SSIM"; Type = "SSIM" }
+    } elseif ($EnablePSNR -and $null -ne $Result.PSNR) {
+        return @{ Value = $Result.PSNR; Name = "PSNR"; Type = "PSNR" }
+    }
+    return $null
+}
+
+function Get-QualityAssessment {
+    param($Metric)
+
+    if (-not $Metric) {
+        return "Unknown"
+    }
+
+    switch ($Metric.Type) {
+        "VMAF" {
+            if ($Metric.Value -ge $VMAF_Excellent) { return "Excellent" }
+            elseif ($Metric.Value -ge $VMAF_Good) { return "Very Good" }
+            elseif ($Metric.Value -ge $VMAF_Acceptable) { return "Acceptable" }
+            else { return "Poor" }
+        }
+        "SSIM" {
+            if ($Metric.Value -ge $SSIM_Excellent) { return "Excellent" }
+            elseif ($Metric.Value -ge $SSIM_Good) { return "Very Good" }
+            elseif ($Metric.Value -ge $SSIM_Acceptable) { return "Acceptable" }
+            else { return "Poor" }
+        }
+        "PSNR" {
+            if ($Metric.Value -ge $PSNR_Excellent) { return "Excellent" }
+            elseif ($Metric.Value -ge $PSNR_Good) { return "Very Good" }
+            elseif ($Metric.Value -ge $PSNR_Acceptable) { return "Acceptable" }
+            else { return "Poor" }
+        }
+    }
+    return "Unknown"
+}
+
+function Get-QualityColor {
+    param([string]$Assessment)
+
+    switch ($Assessment) {
+        "Excellent" { return "Green" }
+        "Very Good" { return "Cyan" }
+        "Acceptable" { return "Yellow" }
+        "Poor" { return "Red" }
+        default { return "Gray" }
     }
 }
 
@@ -235,6 +370,19 @@ function Get-QualityColor {
 Write-Host "`n========================================" -ForegroundColor Cyan
 Write-Host "  VIDEO QUALITY COMPARISON" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
+
+# Show enabled metrics
+Write-Host "`nEnabled metrics: " -NoNewline -ForegroundColor White
+$enabledList = @()
+if ($EnableVMAF) { $enabledList += "VMAF" }
+if ($EnableSSIM) { $enabledList += "SSIM" }
+if ($EnablePSNR) { $enabledList += "PSNR" }
+Write-Host ($enabledList -join ", ") -ForegroundColor Cyan
+
+# Determine primary metric for assessment
+$primaryMetric = if ($EnableVMAF) { "VMAF" } elseif ($EnableSSIM) { "SSIM" } else { "PSNR" }
+Write-Host "Primary metric for assessment: " -NoNewline -ForegroundColor White
+Write-Host $primaryMetric -ForegroundColor Green
 
 # Create report directory if it doesn't exist
 if (-not (Test-Path $ReportDir)) {
@@ -250,6 +398,11 @@ try {
     Write-Host "ERROR: ffmpeg not found!" -ForegroundColor Red
     Write-Host "Please install ffmpeg and add it to your PATH.`n" -ForegroundColor Yellow
     exit 1
+}
+
+# Check for VMAF model if VMAF is enabled
+if ($EnableVMAF) {
+    Write-Host "Note: VMAF requires libvmaf support in ffmpeg" -ForegroundColor DarkGray
 }
 
 # Get all files from input directory
@@ -320,8 +473,7 @@ if ($matchedPairs.Count -eq 0) {
 
 Write-Host "Found $($matchedPairs.Count) matching pair(s) to compare" -ForegroundColor Green
 Write-Host ""
-Write-Host "Note: Quality analysis uses SSIM (Structural Similarity Index)" -ForegroundColor DarkGray
-Write-Host "      Analysis takes 1-3x video duration (CPU only)" -ForegroundColor DarkGray
+Write-Host "Note: Quality analysis is CPU-intensive (1-5x video duration depending on metrics)" -ForegroundColor DarkGray
 Write-Host ""
 Write-Host "========================================`n" -ForegroundColor Cyan
 
@@ -355,30 +507,49 @@ foreach ($pair in $matchedPairs) {
     # Compare quality
     $result = Compare-VideoQuality -SourcePath $pair.Source.FullName -EncodedPath $pair.Encoded.FullName
 
-    if ($result -and $null -ne $result.SSIM) {
-        $qualityColor = Get-QualityColor -SSIM $result.SSIM
+    if ($result) {
+        $primaryMetricData = Get-PrimaryMetricValue -Result $result
+        $assessment = Get-QualityAssessment -Metric $primaryMetricData
 
         Write-Host ""
-        Write-Host "  +-- Quality Metric ----------------------+" -ForegroundColor DarkGray
-        Write-Host "  | SSIM: " -NoNewline -ForegroundColor White
-        Write-Host "$($result.SSIM.ToString().PadRight(6)) / 1.00" -NoNewline -ForegroundColor $qualityColor
-        Write-Host "                 |" -ForegroundColor DarkGray
+        Write-Host "  +-- Quality Metrics ---------------------+" -ForegroundColor DarkGray
+
+        if ($EnableVMAF -and $null -ne $result.VMAF) {
+            $vColor = Get-QualityColor -Assessment (Get-QualityAssessment -Metric @{ Value = $result.VMAF; Type = "VMAF" })
+            $primary = if ($primaryMetricData.Type -eq "VMAF") { " *" } else { "" }
+            Write-Host "  | VMAF: " -NoNewline -ForegroundColor White
+            Write-Host "$($result.VMAF.ToString().PadRight(6)) / 100" -NoNewline -ForegroundColor $vColor
+            Write-Host "$($primary.PadRight(17 - $primary.Length))|" -ForegroundColor DarkGray
+        }
+
+        if ($EnableSSIM -and $null -ne $result.SSIM) {
+            $sColor = Get-QualityColor -Assessment (Get-QualityAssessment -Metric @{ Value = $result.SSIM; Type = "SSIM" })
+            $primary = if ($primaryMetricData.Type -eq "SSIM") { " *" } else { "" }
+            Write-Host "  | SSIM: " -NoNewline -ForegroundColor White
+            Write-Host "$($result.SSIM.ToString().PadRight(6)) / 1.00" -NoNewline -ForegroundColor $sColor
+            Write-Host "$($primary.PadRight(17 - $primary.Length))|" -ForegroundColor DarkGray
+        }
+
+        if ($EnablePSNR -and $null -ne $result.PSNR) {
+            $pColor = Get-QualityColor -Assessment (Get-QualityAssessment -Metric @{ Value = $result.PSNR; Type = "PSNR" })
+            $primary = if ($primaryMetricData.Type -eq "PSNR") { " *" } else { "" }
+            Write-Host "  | PSNR: " -NoNewline -ForegroundColor White
+            Write-Host "$($result.PSNR.ToString().PadRight(6)) dB" -NoNewline -ForegroundColor $pColor
+            Write-Host "$($primary.PadRight(21 - $primary.Length))|" -ForegroundColor DarkGray
+        }
+
         Write-Host "  +-----------------------------------------+" -ForegroundColor DarkGray
 
-        # Quality assessment based on SSIM only
-        if ($result.SSIM -ge $SSIM_Excellent) {
-            Write-Host "  Result: " -NoNewline -ForegroundColor White
-            Write-Host "Excellent quality (visually lossless)" -ForegroundColor Green
-        } elseif ($result.SSIM -ge $SSIM_Good) {
-            Write-Host "  Result: " -NoNewline -ForegroundColor White
-            Write-Host "Very good quality (minimal artifacts)" -ForegroundColor Cyan
-        } elseif ($result.SSIM -ge $SSIM_Acceptable) {
-            Write-Host "  Result: " -NoNewline -ForegroundColor White
-            Write-Host "Acceptable quality" -ForegroundColor Yellow
-        } else {
-            Write-Host "  Result: " -NoNewline -ForegroundColor White
-            Write-Host "Poor quality (consider higher bitrate)" -ForegroundColor Red
+        # Quality assessment based on primary metric
+        Write-Host "  Result: " -NoNewline -ForegroundColor White
+        switch ($assessment) {
+            "Excellent" { Write-Host "Excellent quality (visually lossless)" -ForegroundColor Green }
+            "Very Good" { Write-Host "Very good quality (minimal artifacts)" -ForegroundColor Cyan }
+            "Acceptable" { Write-Host "Acceptable quality" -ForegroundColor Yellow }
+            "Poor" { Write-Host "Poor quality (consider higher bitrate)" -ForegroundColor Red }
         }
+
+        Write-Host "  (Based on primary metric: $($primaryMetricData.Name))" -ForegroundColor DarkGray
 
         # Add to report data
         $reportData += [PSCustomObject]@{
@@ -395,12 +566,12 @@ foreach ($pair in $matchedPairs) {
             EncodedBitrateMbps = [math]::Round($encodedInfo.Bitrate / 1000000, 2)
             DurationSeconds = $sourceInfo.Duration
             AnalysisTimeSeconds = [math]::Round($result.AnalysisTime, 1)
+            VMAF = $result.VMAF
             SSIM = $result.SSIM
-            QualityAssessment = if ($result.SSIM -ge $SSIM_Excellent) { "Excellent" } elseif ($result.SSIM -ge $SSIM_Good) { "Very Good" } elseif ($result.SSIM -ge $SSIM_Acceptable) { "Acceptable" } else { "Poor" }
+            PSNR = $result.PSNR
+            PrimaryMetric = $primaryMetricData.Name
+            QualityAssessment = $assessment
         }
-    } elseif ($result) {
-        Write-Host ""
-        Write-Host "  Quality analysis incomplete (metric failed to parse)" -ForegroundColor Yellow
     } else {
         Write-Host ""
         Write-Host "  Quality analysis failed" -ForegroundColor Red
@@ -429,10 +600,9 @@ if ($reportData.Count -gt 0) {
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
 
-    $avgSSIM = [math]::Round(($reportData | Measure-Object -Property SSIM -Average).Average, 4)
+    $totalAnalysisTime = [math]::Round(($reportData | Measure-Object -Property AnalysisTimeSeconds -Sum).Sum, 1)
     $avgCompression = [math]::Round(($reportData | Measure-Object -Property CompressionRatio -Average).Average, 2)
     $avgSpaceSaved = [math]::Round(($reportData | Measure-Object -Property SpaceSavedPercent -Average).Average, 1)
-    $totalAnalysisTime = [math]::Round(($reportData | Measure-Object -Property AnalysisTimeSeconds -Sum).Sum, 1)
 
     $excellentCount = ($reportData | Where-Object { $_.QualityAssessment -eq "Excellent" }).Count
     $veryGoodCount = ($reportData | Where-Object { $_.QualityAssessment -eq "Very Good" }).Count
@@ -442,13 +612,30 @@ if ($reportData.Count -gt 0) {
     Write-Host "Files Compared:       $($reportData.Count)" -ForegroundColor White
     Write-Host "Total Analysis Time:  $totalAnalysisTime seconds" -ForegroundColor White
     Write-Host ""
-    Write-Host "Average Quality Metric:" -ForegroundColor White
-    Write-Host "  SSIM: " -NoNewline -ForegroundColor White
-    Write-Host "$avgSSIM / 1.00" -ForegroundColor Cyan
+    Write-Host "Average Quality Metrics:" -ForegroundColor White
+
+    if ($EnableVMAF) {
+        $avgVMAF = [math]::Round(($reportData | Where-Object { $null -ne $_.VMAF } | Measure-Object -Property VMAF -Average).Average, 2)
+        Write-Host "  VMAF: " -NoNewline -ForegroundColor White
+        Write-Host "$avgVMAF / 100" -ForegroundColor Cyan
+    }
+
+    if ($EnableSSIM) {
+        $avgSSIM = [math]::Round(($reportData | Where-Object { $null -ne $_.SSIM } | Measure-Object -Property SSIM -Average).Average, 4)
+        Write-Host "  SSIM: " -NoNewline -ForegroundColor White
+        Write-Host "$avgSSIM / 1.00" -ForegroundColor Cyan
+    }
+
+    if ($EnablePSNR) {
+        $avgPSNR = [math]::Round(($reportData | Where-Object { $null -ne $_.PSNR } | Measure-Object -Property PSNR -Average).Average, 2)
+        Write-Host "  PSNR: " -NoNewline -ForegroundColor White
+        Write-Host "$avgPSNR dB" -ForegroundColor Cyan
+    }
+
     Write-Host ""
     Write-Host "Average Compression:  ${avgCompression}x (${avgSpaceSaved}% space saved)" -ForegroundColor White
     Write-Host ""
-    Write-Host "Quality Distribution:" -ForegroundColor White
+    Write-Host "Quality Distribution (based on $primaryMetric):" -ForegroundColor White
     if ($excellentCount -gt 0) {
         Write-Host "  Excellent:   $excellentCount" -ForegroundColor Green
     }
