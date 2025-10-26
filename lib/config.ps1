@@ -76,28 +76,28 @@ $BitrateMultiplier = 0.8
 # Note: Preset is controlled by the GUI slider and is no longer defined here
 $ParameterMap = @(
     # 8K 60fps
-    @{ ProfileName = "8K 60fps+"; ResolutionMin = 7680; FPSMin = 50; FPSMax = 999; VideoBitrate = "80M" },
+    @{ ProfileName = "8K 60fps+"; ResolutionMin = 7680; FPSMin = 50; FPSMax = 999; VideoBitrate = "70M" },
 
     # 8K 30fps
-    @{ ProfileName = "8K 30fps"; ResolutionMin = 7680; FPSMin = 0; FPSMax = 50; VideoBitrate = "60M" },
+    @{ ProfileName = "8K 30fps"; ResolutionMin = 7680; FPSMin = 0; FPSMax = 50; VideoBitrate = "50M" },
 
     # 4K 60fps
     @{ ProfileName = "4K 60fps+"; ResolutionMin = 3840; FPSMin = 50; FPSMax = 999; VideoBitrate = "40M" },
 
     # 4K 30fps
-    @{ ProfileName = "4K 30fps"; ResolutionMin = 3840; FPSMin = 0; FPSMax = 50; VideoBitrate = "30M" },
+    @{ ProfileName = "4K 30fps"; ResolutionMin = 3840; FPSMin = 0; FPSMax = 50; VideoBitrate = "25M" },
 
     # 2.7K/1440p 60fps
     @{ ProfileName = "2.7K 60fps+"; ResolutionMin = 2560; FPSMin = 50; FPSMax = 999; VideoBitrate = "30M" },
 
     # 2.7K/1440p 30fps
-    @{ ProfileName = "2.7K 30fps"; ResolutionMin = 2560; FPSMin = 0; FPSMax = 50; VideoBitrate = "25M" },
+    @{ ProfileName = "2.7K 30fps"; ResolutionMin = 2560; FPSMin = 0; FPSMax = 50; VideoBitrate = "18M" },
 
     # 1080p 80fps+
-    @{ ProfileName = "1080p 50fps+"; ResolutionMin = 1920; FPSMin = 50; FPSMax = 999; VideoBitrate = "25M" },
+    @{ ProfileName = "1080p 50fps+"; ResolutionMin = 1920; FPSMin = 50; FPSMax = 999; VideoBitrate = "15M" },
 
     # 1080p 30fps
-    @{ ProfileName = "1080p 30fps"; ResolutionMin = 1920; FPSMin = 0; FPSMax = 50; VideoBitrate = "15M" },
+    @{ ProfileName = "1080p 30fps"; ResolutionMin = 1920; FPSMin = 0; FPSMax = 50; VideoBitrate = "10M" },
 
     # 720p and below
     @{ ProfileName = "720p or lower"; ResolutionMin = 0; FPSMin = 0; FPSMax = 999; VideoBitrate = "10M" }
