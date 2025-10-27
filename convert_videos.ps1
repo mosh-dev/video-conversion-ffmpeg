@@ -352,7 +352,7 @@ foreach ($File in $VideoFiles) {
                          else { "Poor" }
 
             Write-Host ""
-            Write-Host "  VMAF Score: " -NoNewline -ForegroundColor White
+            Write-Host "  ~VMAF Score: " -NoNewline -ForegroundColor White
             Write-Host "$vmafScore" -NoNewline -ForegroundColor $scoreColor
             Write-Host " / 100 (" -NoNewline -ForegroundColor White
             Write-Host "$assessment" -NoNewline -ForegroundColor $scoreColor
@@ -547,10 +547,10 @@ foreach ($File in $VideoFiles) {
             if ($OutputSizeMB -gt 0 -and $InputSizeMB -gt 0) {
                 $CompressionRatio = [math]::Round(($InputSizeMB / $OutputSizeMB), 2)
                 $SpaceSaved = [math]::Round((($InputSizeMB - $OutputSizeMB) / $InputSizeMB * 100), 1)
-                Write-Host "  Success: $DurationStr | $OutputSizeMB MB | Compression: ${CompressionRatio}x (${SpaceSaved}% saved)" -ForegroundColor Green
+                Write-Host "  Success: $DurationStr | $OutputSizeMB MB | Compression: ${CompressionRatio}x (${SpaceSaved}% saved) `n" -ForegroundColor Green
                 [System.IO.File]::AppendAllText($LogFile, "Success: $($File.Name) -> $OutputFileName (Duration: $TimeStr, Input: $InputSizeMB MB, Output: $OutputSizeMB MB, Compression: ${CompressionRatio}x, Space Saved: ${SpaceSaved}%)`n", [System.Text.UTF8Encoding]::new($false))
             } else {
-                Write-Host "  Success: $DurationStr | Output: $OutputSizeMB MB | Input: $InputSizeMB MB" -ForegroundColor Green
+                Write-Host "  Success: $DurationStr | Output: $OutputSizeMB MB | Input: $InputSizeMB MB `n" -ForegroundColor Green
                 [System.IO.File]::AppendAllText($LogFile, "Success: $($File.Name) -> $OutputFileName (Duration: $TimeStr, Input: $InputSizeMB MB, Output: $OutputSizeMB MB)`n", [System.Text.UTF8Encoding]::new($false))
             }
             $SuccessCount++
