@@ -12,7 +12,8 @@
       "Bash(dotnet --version:*)",
       "Bash(dotnet restore:*)",
       "Bash(dotnet build:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Read(//d/**)"
     ],
     "deny": [],
     "ask": []

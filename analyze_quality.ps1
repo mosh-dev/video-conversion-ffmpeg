@@ -9,14 +9,34 @@
 # Import configuration
 . ".\config\quality_analyzer_config.ps1"
 
-# Validate that at least one metric is enabled
-if (-not $EnableVMAF -and -not $EnableSSIM -and -not $EnablePSNR) {
-    Write-Host ""
-    Write-Host "ERROR: At least one quality metric must be enabled in config/quality_analyzer_config.ps1" -ForegroundColor Red
-    Write-Host "Please enable VMAF, SSIM, or PSNR and try again." -ForegroundColor Yellow
-    Write-Host ""
-    exit 1
+# Load helper functions
+. ".\lib\helpers.ps1"
+
+# Load UI module
+. ".\lib\show_quality_analyzer_ui.ps1"
+
+# ============================================================================
+# SHOW UI AND GET USER SELECTIONS
+# ============================================================================
+
+$uiResult = Show-QualityAnalyzerUI -EnableVMAF $EnableVMAF `
+                                    -EnableSSIM $EnableSSIM `
+                                    -EnablePSNR $EnablePSNR `
+                                    -VMAF_Subsample $VMAF_Subsample
+
+# Check if user cancelled
+if ($uiResult.Cancelled) {
+    Write-Host "`nQuality analysis cancelled by user." -ForegroundColor Yellow
+    exit
 }
+
+# Apply selected values
+$EnableVMAF = $uiResult.EnableVMAF
+$EnableSSIM = $uiResult.EnableSSIM
+$EnablePSNR = $uiResult.EnablePSNR
+$VMAF_Subsample = $uiResult.VMAF_Subsample
+
+Write-Host ""
 
 # Configuration
 $Timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
@@ -44,111 +64,14 @@ function Get-BaseFileName {
     return $fileName
 }
 
-function Get-VideoMetadata {
-    param([string]$FilePath)
-
-    try {
-        # Get resolution (TS/M2TS files may return multiple lines, so take first non-empty line)
-        $WidthRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
-        $WidthOutput = if ($WidthRaw) { $WidthRaw.Trim().TrimEnd(',') } else { "" }
-
-        $HeightRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
-        $HeightOutput = if ($HeightRaw) { $HeightRaw.Trim().TrimEnd(',') } else { "" }
-
-        $FPSRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
-        $FPSOutput = if ($FPSRaw) { $FPSRaw.Trim().TrimEnd(',') } else { "" }
-
-        # Try to get bitrate from video stream first (TS/M2TS files may return multiple lines)
-        $BitrateRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=bit_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
-        $BitrateOutput = if ($BitrateRaw) { $BitrateRaw.Trim().TrimEnd(',') } else { "" }
-
-        # If stream bitrate is N/A or empty, try format bitrate (common for MKV, TS, M2TS files)
-        if (-not $BitrateOutput -or $BitrateOutput -eq "N/A" -or $BitrateOutput -eq "") {
-            $BitrateFormatRaw = & ffprobe -v error -show_entries format=bit_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
-            $BitrateOutput = if ($BitrateFormatRaw) { $BitrateFormatRaw.Trim().TrimEnd(',') } else { "" }
-        }
-
-        # Get duration
-        $DurationRaw = & ffprobe -v error -show_entries format=duration -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
-        $DurationOutput = if ($DurationRaw) { $DurationRaw.Trim().TrimEnd(',') } else { "" }
-
-        $Width = if ($WidthOutput) { [int]$WidthOutput } else { 0 }
-        $Height = if ($HeightOutput) { [int]$HeightOutput } else { 0 }
-
-        # Parse FPS (format: "60000/1001" or "60/1")
-        $FPS = 0
-        if ($FPSOutput -match "(\d+)/(\d+)") {
-            $FPS = [math]::Round([double]$matches[1] / [double]$matches[2], 2)
-        } elseif ($FPSOutput) {
-            $FPS = [double]$FPSOutput
-        }
-
-        # Parse duration
-        $Duration = if ($DurationOutput) { [math]::Round([double]$DurationOutput, 2) } else { 0 }
-
-        # Parse bitrate (in bits per second)
-        $Bitrate = 0
-        if ($BitrateOutput -and $BitrateOutput -ne "N/A" -and $BitrateOutput -match "^\d+$") {
-            try {
-                $Bitrate = [int64]$BitrateOutput
-            } catch {
-                $Bitrate = 0
-            }
-        }
-
-        # If bitrate still not available, calculate from file size and duration
-        if ($Bitrate -eq 0) {
-            try {
-                # Get file size in bytes
-                $FileInfo = Get-Item -LiteralPath $FilePath
-                $FileSizeBytes = $FileInfo.Length
-
-                # Calculate total bitrate from file size and duration
-                if ($Duration -gt 0) {
-                    $TotalBitrate = [int64](($FileSizeBytes * 8) / $Duration)
-
-                    # Estimate audio bitrate and subtract it to get video bitrate
-                    # Common audio bitrates: stereo AAC ~128-256kbps, multichannel ~384-640kbps
-                    # Use conservative estimate of 256kbps (256000 bps)
-                    $EstimatedAudioBitrate = 256000
-
-                    # Subtract audio bitrate estimate from total
-                    $Bitrate = $TotalBitrate - $EstimatedAudioBitrate
-
-                    # Ensure bitrate is positive (in case of very small files)
-                    if ($Bitrate -lt 0) {
-                        $Bitrate = [int64]($TotalBitrate * 0.9)  # Use 90% of total as fallback
-                    }
-                }
-            } catch {
-                # If calculation fails, bitrate remains 0
-                $Bitrate = 0
-            }
-        }
-
-        # Get file size
-        $FileInfo = Get-Item -LiteralPath $FilePath -ErrorAction SilentlyContinue
-        $Size = if ($FileInfo) { $FileInfo.Length } else { 0 }
-
-        return @{
-            Width = $Width
-            Height = $Height
-            FPS = $FPS
-            Duration = $Duration
-            Size = $Size
-            Bitrate = $Bitrate
-            Resolution = "${Width}x${Height}"
-        }
-    } catch {
-        Write-Host "  Error reading metadata: $($_.Exception.Message)" -ForegroundColor Red
-        return $null
-    }
-}
+# Get-VideoMetadata is now loaded from lib/helpers.ps1
 
 function Compare-VideoQuality {
     param(
         [string]$SourcePath,
-        [string]$EncodedPath
+        [string]$EncodedPath,
+        [int]$CurrentIndex,
+        [int]$TotalCount
     )
 
     # Scale videos to same resolution if needed
@@ -269,8 +192,50 @@ function Compare-VideoQuality {
             "-"
         )
 
-        # Run ffmpeg and capture output
-        $ffmpegOutput = & ffmpeg @ffmpegArgs 2>&1 | Out-String
+        # Run ffmpeg with progress tracking
+        Write-Host "  Progress: 0%" -NoNewline -ForegroundColor Yellow
+        $ffmpegOutput = ""
+        $process = Start-Process -FilePath "ffmpeg" -ArgumentList $ffmpegArgs -NoNewWindow -PassThru -RedirectStandardError "nul" -Wait -ErrorAction SilentlyContinue
+
+        # Capture ffmpeg output for progress and metrics
+        $captureJob = Start-Job -ScriptBlock {
+            param($args)
+            & ffmpeg @args 2>&1
+        } -ArgumentList (,$ffmpegArgs)
+
+        # Track progress
+        $lastProgress = 0
+        while ($captureJob.State -eq 'Running') {
+            $output = Receive-Job -Job $captureJob -ErrorAction SilentlyContinue
+            if ($output) {
+                $ffmpegOutput += $output | Out-String
+
+                # Parse progress from ffmpeg output
+                foreach ($line in $output) {
+                    if ($line -match "time=(\d+):(\d+):(\d+)") {
+                        $hours = [int]$matches[1]
+                        $minutes = [int]$matches[2]
+                        $seconds = [int]$matches[3]
+                        $currentTime = $hours * 3600 + $minutes * 60 + $seconds
+
+                        if ($sourceInfo.Duration -gt 0) {
+                            $progress = [Math]::Min(100, [Math]::Round(($currentTime / $sourceInfo.Duration) * 100))
+                            if ($progress -gt $lastProgress) {
+                                $lastProgress = $progress
+                                Write-Host "`r  Progress: $progress%" -NoNewline -ForegroundColor Yellow
+                            }
+                        }
+                    }
+                }
+            }
+            Start-Sleep -Milliseconds 100
+        }
+
+        # Get final output
+        $ffmpegOutput += Receive-Job -Job $captureJob | Out-String
+        Remove-Job -Job $captureJob -Force
+
+        Write-Host "`r  Progress: 100% - Complete" -ForegroundColor Green
 
         # Parse metrics
         $vmaf = $null
@@ -505,7 +470,7 @@ foreach ($pair in $matchedPairs) {
     Write-Host "  Duration: $($sourceInfo.Duration)s" -ForegroundColor Gray
 
     # Compare quality
-    $result = Compare-VideoQuality -SourcePath $pair.Source.FullName -EncodedPath $pair.Encoded.FullName
+    $result = Compare-VideoQuality -SourcePath $pair.Source.FullName -EncodedPath $pair.Encoded.FullName -CurrentIndex $currentComparison -TotalCount $matchedPairs.Count
 
     if ($result) {
         $primaryMetricData = Get-PrimaryMetricValue -Result $result

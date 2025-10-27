@@ -1,210 +1,8 @@
 # Test script for comprehensive video metadata detection
 # This script tests all metadata fields used by the conversion script
 
-# Function to get comprehensive video metadata using ffprobe
-function Get-VideoMetadata {
-    param([string]$FilePath)
-
-    try {
-        # Get video stream metadata (TS/M2TS files may return multiple lines, so take first non-empty line)
-        $WidthRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
-        $WidthOutput = if ($WidthRaw) { $WidthRaw.Trim().TrimEnd(',') } else { "" }
-
-        $HeightRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
-        $HeightOutput = if ($HeightRaw) { $HeightRaw.Trim().TrimEnd(',') } else { "" }
-
-        $FPSRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
-        $FPSOutput = if ($FPSRaw) { $FPSRaw.Trim().TrimEnd(',') } else { "" }
-
-        $VideoCodecRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
-        $VideoCodecOutput = if ($VideoCodecRaw) { $VideoCodecRaw.Trim().TrimEnd(',') } else { "" }
-
-        $PixelFormatRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=pix_fmt -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
-        $PixelFormatOutput = if ($PixelFormatRaw) { $PixelFormatRaw.Trim().TrimEnd(',') } else { "" }
-
-        $ColorSpaceRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=color_space -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
-        $ColorSpaceOutput = if ($ColorSpaceRaw) { $ColorSpaceRaw.Trim().TrimEnd(',') } else { "" }
-
-        # Try to get bitrate from video stream first
-        $BitrateRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=bit_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
-        $BitrateOutput = if ($BitrateRaw) { $BitrateRaw.Trim().TrimEnd(',') } else { "" }
-
-        # If stream bitrate is N/A or empty, try format bitrate (common for MKV, TS, M2TS files)
-        if (-not $BitrateOutput -or $BitrateOutput -eq "N/A" -or $BitrateOutput -eq "") {
-            $BitrateFormatRaw = & ffprobe -v error -show_entries format=bit_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
-            $BitrateOutput = if ($BitrateFormatRaw) { $BitrateFormatRaw.Trim().TrimEnd(',') } else { "" }
-        }
-
-        # Get audio stream metadata
-        $AudioCodecRaw = & ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
-        $AudioCodecOutput = if ($AudioCodecRaw) { $AudioCodecRaw.Trim().TrimEnd(',') } else { "" }
-
-        $AudioBitrateRaw = & ffprobe -v error -select_streams a:0 -show_entries stream=bit_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
-        $AudioBitrateOutput = if ($AudioBitrateRaw) { $AudioBitrateRaw.Trim().TrimEnd(',') } else { "" }
-
-        $AudioChannelsRaw = & ffprobe -v error -select_streams a:0 -show_entries stream=channels -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
-        $AudioChannelsOutput = if ($AudioChannelsRaw) { $AudioChannelsRaw.Trim().TrimEnd(',') } else { "" }
-
-        $AudioSampleRateRaw = & ffprobe -v error -select_streams a:0 -show_entries stream=sample_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
-        $AudioSampleRateOutput = if ($AudioSampleRateRaw) { $AudioSampleRateRaw.Trim().TrimEnd(',') } else { "" }
-
-        # Get format metadata
-        $DurationRaw = & ffprobe -v error -show_entries format=duration -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
-        $DurationOutput = if ($DurationRaw) { $DurationRaw.Trim().TrimEnd(',') } else { "" }
-
-        $FormatNameRaw = & ffprobe -v error -show_entries format=format_name -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
-        $FormatNameOutput = if ($FormatNameRaw) { $FormatNameRaw.Trim().TrimEnd(',') } else { "" }
-
-        # Parse video metadata
-        $Width = if ($WidthOutput) { [int]$WidthOutput } else { 0 }
-        $Height = if ($HeightOutput) { [int]$HeightOutput } else { 0 }
-
-        # Parse FPS (format: "60000/1001" or "60/1")
-        $FPS = 0
-        if ($FPSOutput -match "(\d+)/(\d+)") {
-            $FPS = [math]::Round([double]$matches[1] / [double]$matches[2], 2)
-        } elseif ($FPSOutput) {
-            $FPS = [double]$FPSOutput
-        }
-
-        # Parse bitrate (in bits per second)
-        $Bitrate = 0
-        $BitrateMethod = "unknown"
-
-        if ($BitrateOutput -and $BitrateOutput -ne "N/A" -and $BitrateOutput -match "^\d+$") {
-            try {
-                $Bitrate = [int64]$BitrateOutput
-                $BitrateMethod = "stream"
-            } catch {
-                $Bitrate = 0
-            }
-        }
-
-        # If bitrate still not available, calculate from file size and duration
-        if ($Bitrate -eq 0) {
-            try {
-                $Duration = if ($DurationOutput) { [double]$DurationOutput } else { 0 }
-
-                # Get file size in bytes
-                $FileInfo = Get-Item -LiteralPath $FilePath
-                $FileSizeBytes = $FileInfo.Length
-
-                # Calculate total bitrate from file size and duration
-                if ($Duration -gt 0) {
-                    $TotalBitrate = [int64](($FileSizeBytes * 8) / $Duration)
-
-                    # Estimate audio bitrate and subtract it to get video bitrate
-                    $EstimatedAudioBitrate = 256000
-
-                    # Subtract audio bitrate estimate from total
-                    $Bitrate = $TotalBitrate - $EstimatedAudioBitrate
-
-                    # Ensure bitrate is positive (in case of very small files)
-                    if ($Bitrate -lt 0) {
-                        $Bitrate = [int64]($TotalBitrate * 0.9)  # Use 90% of total as fallback
-                    }
-
-                    $BitrateMethod = "calculated"
-                }
-            } catch {
-                # If calculation fails, bitrate remains 0
-                $Bitrate = 0
-            }
-        }
-
-        # Parse audio bitrate
-        $AudioBitrate = 0
-        if ($AudioBitrateOutput -and $AudioBitrateOutput -ne "N/A" -and $AudioBitrateOutput -match "^\d+$") {
-            try {
-                $AudioBitrate = [int64]$AudioBitrateOutput
-            } catch {
-                $AudioBitrate = 0
-            }
-        }
-
-        # Parse audio channels
-        $AudioChannels = 0
-        if ($AudioChannelsOutput) {
-            try {
-                $AudioChannels = [int]$AudioChannelsOutput
-            } catch {
-                $AudioChannels = 0
-            }
-        }
-
-        # Parse duration
-        $Duration = 0
-        if ($DurationOutput) {
-            try {
-                $Duration = [double]$DurationOutput
-            } catch {
-                $Duration = 0
-            }
-        }
-
-        return @{
-            Width = $Width
-            Height = $Height
-            FPS = $FPS
-            Bitrate = $Bitrate
-            BitrateMethod = $BitrateMethod
-            Resolution = "${Width}x${Height}"
-            VideoCodec = if ($VideoCodecOutput) { $VideoCodecOutput } else { "unknown" }
-            PixelFormat = if ($PixelFormatOutput) { $PixelFormatOutput } else { "unknown" }
-            ColorSpace = if ($ColorSpaceOutput -and $ColorSpaceOutput -ne "") { $ColorSpaceOutput } else { "unknown" }
-            AudioCodec = if ($AudioCodecOutput) { $AudioCodecOutput } else { "none" }
-            AudioBitrate = $AudioBitrate
-            AudioChannels = $AudioChannels
-            AudioSampleRate = if ($AudioSampleRateOutput) { $AudioSampleRateOutput } else { "0" }
-            Duration = $Duration
-            FormatName = if ($FormatNameOutput) { $FormatNameOutput } else { "unknown" }
-        }
-    } catch {
-        Write-Host "  ERROR: Could not read video metadata - $($_.Exception.Message)" -ForegroundColor Red
-        return $null
-    }
-}
-
-# Function to convert bits per second to bitrate string
-function ConvertTo-BitrateString {
-    param([int64]$BitsPerSecond)
-
-    if ($BitsPerSecond -eq 0) {
-        return "N/A"
-    }
-
-    if ($BitsPerSecond -ge 1000000000) {
-        $Value = [math]::Round($BitsPerSecond / 1000000000.0, 1)
-        return "${Value}G"
-    } elseif ($BitsPerSecond -ge 1000000) {
-        $Value = [math]::Round($BitsPerSecond / 1000000.0, 1)
-        return "${Value}M"
-    } elseif ($BitsPerSecond -ge 1000) {
-        $Value = [math]::Round($BitsPerSecond / 1000.0, 1)
-        return "${Value}K"
-    }
-
-    return "${BitsPerSecond}"
-}
-
-# Function to format duration
-function Format-Duration {
-    param([double]$Seconds)
-
-    if ($Seconds -eq 0) {
-        return "N/A"
-    }
-
-    $Hours = [math]::Floor($Seconds / 3600)
-    $Minutes = [math]::Floor(($Seconds % 3600) / 60)
-    $Secs = [math]::Floor($Seconds % 60)
-
-    $HoursStr = $Hours.ToString("00")
-    $MinutesStr = $Minutes.ToString("00")
-    $SecsStr = $Secs.ToString("00")
-
-    return $HoursStr + ":" + $MinutesStr + ":" + $SecsStr
-}
+# Load helper functions from lib/helpers.ps1
+. .\lib\helpers.ps1
 
 # Test all video files in _input_files directory
 $InputDir = ".\_input_files"
@@ -243,6 +41,22 @@ foreach ($File in $VideoFiles) {
         # VIDEO STREAM INFO
         Write-Host "  [VIDEO]" -ForegroundColor Yellow
         Write-Host "    Resolution:    $($Metadata.Resolution) @ $($Metadata.FPS)fps" -ForegroundColor White
+        Write-Host "    Codec:         $($Metadata.VideoCodec)" -ForegroundColor White
+        Write-Host "    Bit Depth:     $($Metadata.SourceBitDepth)-bit" -ForegroundColor White
+        Write-Host "    Pixel Format:  $($Metadata.PixelFormat)" -ForegroundColor White
+
+        # Color information with detailed breakdown
+        $ColorInfoColor = if ($Metadata.ColorSpace -eq "unknown") { "Red" } else { "White" }
+        Write-Host "    Color Info:    $($Metadata.ColorSpace)" -ForegroundColor $ColorInfoColor
+
+        # Show individual color components if available
+        if ($Metadata.ColorSpaceRaw -ne "unknown" -or $Metadata.ColorPrimaries -ne "unknown" -or
+            $Metadata.ColorTransfer -ne "unknown" -or $Metadata.ColorRange -ne "unknown") {
+            Write-Host "      Space:       $($Metadata.ColorSpaceRaw)" -ForegroundColor DarkGray
+            Write-Host "      Primaries:   $($Metadata.ColorPrimaries)" -ForegroundColor DarkGray
+            Write-Host "      Transfer:    $($Metadata.ColorTransfer)" -ForegroundColor DarkGray
+            Write-Host "      Range:       $($Metadata.ColorRange)" -ForegroundColor DarkGray
+        }
 
         $BitrateStr = ConvertTo-BitrateString -BitsPerSecond $Metadata.Bitrate
         $BitrateColor = switch ($Metadata.BitrateMethod) {
@@ -250,10 +64,18 @@ foreach ($File in $VideoFiles) {
             "calculated" { "Yellow" }
             default { "Red" }
         }
-        Write-Host "    Bitrate:       $BitrateStr ($($Metadata.BitrateMethod))" -ForegroundColor $BitrateColor
-        Write-Host "    Codec:         $($Metadata.VideoCodec)" -ForegroundColor White
-        Write-Host "    Pixel Format:  $($Metadata.PixelFormat)" -ForegroundColor White
-        Write-Host "    Color Space:   $($Metadata.ColorSpace)" -ForegroundColor White
+
+        # Determine if VBR or CBR (simplified heuristic)
+        $BitrateMode = "Unknown"
+        if ($Metadata.BitrateMethod -eq "stream") {
+            # For most formats, if bitrate is reported from stream, it's typically CBR or average bitrate
+            $BitrateMode = "CBR/Average"
+        } elseif ($Metadata.BitrateMethod -eq "calculated") {
+            # Calculated bitrate indicates VBR
+            $BitrateMode = "VBR (estimated)"
+        }
+
+        Write-Host "    Bitrate:       $BitrateStr ($($Metadata.BitrateMethod)) - $BitrateMode" -ForegroundColor $BitrateColor
 
         # AUDIO STREAM INFO
         Write-Host "`n  [AUDIO]" -ForegroundColor Yellow

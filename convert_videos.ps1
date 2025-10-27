@@ -13,7 +13,7 @@
 . .\config\codec_mappings.ps1
 
 # Load helper functions
-. .\lib\conversion_helpers.ps1
+. .\lib\helpers.ps1
 
 # ============================================================================
 # SCRIPT LOGIC (DO NOT MODIFY BELOW UNLESS YOU KNOW WHAT YOU'RE DOING)

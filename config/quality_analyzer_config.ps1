@@ -9,10 +9,11 @@
 # QUALITY METRICS CONFIGURATION
 # ============================================================================
 
-# Quality Metrics to Enable (at least one must be enabled)
-$EnableVMAF = $true              # VMAF: Most accurate perceptual quality metric (slowest, requires libvmaf)
-$EnableSSIM = $true              # SSIM: Structural similarity index (moderate speed)
-$EnablePSNR = $true              # PSNR: Peak signal-to-noise ratio (fastest)
+# Default Quality Metrics (these are shown in the UI by default)
+# You can modify these defaults and adjust them in the UI before starting analysis
+$EnableVMAF = $false             # VMAF: Most accurate perceptual quality metric (slowest, requires libvmaf)
+$EnableSSIM = $true              # SSIM: Structural similarity index (moderate speed) - DEFAULT SELECTED
+$EnablePSNR = $true              # PSNR: Peak signal-to-noise ratio (fastest) - DEFAULT SELECTED
 
 # Primary Metric for Quality Assessment:
 # Priority order: VMAF (if enabled) > SSIM (if enabled) > PSNR (if enabled)
@@ -26,7 +27,7 @@ $EnablePSNR = $true              # PSNR: Peak signal-to-noise ratio (fastest)
 $VMAF_Excellent = 95
 $VMAF_Good = 90
 $VMAF_Acceptable = 80
-$VMAF_Subsample = 100
+$VMAF_Subsample = 100            # n_subsample for VMAF (1-500, lower = more accurate but slower)
 
 # SSIM thresholds (0-1 scale)
 $SSIM_Excellent = 0.98

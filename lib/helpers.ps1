@@ -66,6 +66,26 @@ function Get-VideoMetadata {
         $FPSRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
         $FPSOutput = if ($FPSRaw) { $FPSRaw.Trim().TrimEnd(',') } else { "" }
 
+        # Get additional video metadata
+        $VideoCodecRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $VideoCodecOutput = if ($VideoCodecRaw) { $VideoCodecRaw.Trim().TrimEnd(',') } else { "" }
+
+        $PixelFormatRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=pix_fmt -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $PixelFormatOutput = if ($PixelFormatRaw) { $PixelFormatRaw.Trim().TrimEnd(',') } else { "" }
+
+        # Get color information (multiple fields for better detection)
+        $ColorSpaceRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=color_space -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $ColorSpaceOutput = if ($ColorSpaceRaw) { $ColorSpaceRaw.Trim().TrimEnd(',') } else { "" }
+
+        $ColorPrimariesRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=color_primaries -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $ColorPrimariesOutput = if ($ColorPrimariesRaw) { $ColorPrimariesRaw.Trim().TrimEnd(',') } else { "" }
+
+        $ColorTransferRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=color_transfer -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $ColorTransferOutput = if ($ColorTransferRaw) { $ColorTransferRaw.Trim().TrimEnd(',') } else { "" }
+
+        $ColorRangeRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=color_range -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $ColorRangeOutput = if ($ColorRangeRaw) { $ColorRangeRaw.Trim().TrimEnd(',') } else { "" }
+
         # Try to get bitrate from video stream first (TS/M2TS files may return multiple lines)
         $BitrateRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=bit_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
         $BitrateOutput = if ($BitrateRaw) { $BitrateRaw.Trim().TrimEnd(',') } else { "" }
@@ -87,11 +107,29 @@ function Get-VideoMetadata {
             $FPS = [double]$FPSOutput
         }
 
-        # Get video duration in seconds (always extract, not just when bitrate is missing)
+        # Get audio stream metadata
+        $AudioCodecRaw = & ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $AudioCodecOutput = if ($AudioCodecRaw) { $AudioCodecRaw.Trim().TrimEnd(',') } else { "" }
+
+        $AudioBitrateRaw = & ffprobe -v error -select_streams a:0 -show_entries stream=bit_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $AudioBitrateOutput = if ($AudioBitrateRaw) { $AudioBitrateRaw.Trim().TrimEnd(',') } else { "" }
+
+        $AudioChannelsRaw = & ffprobe -v error -select_streams a:0 -show_entries stream=channels -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $AudioChannelsOutput = if ($AudioChannelsRaw) { $AudioChannelsRaw.Trim().TrimEnd(',') } else { "" }
+
+        $AudioSampleRateRaw = & ffprobe -v error -select_streams a:0 -show_entries stream=sample_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $AudioSampleRateOutput = if ($AudioSampleRateRaw) { $AudioSampleRateRaw.Trim().TrimEnd(',') } else { "" }
+
+        # Get format metadata
+        $DurationRaw = & ffprobe -v error -show_entries format=duration -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $DurationOutput = if ($DurationRaw) { $DurationRaw.Trim().TrimEnd(',') } else { "" }
+
+        $FormatNameRaw = & ffprobe -v error -show_entries format=format_name -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $FormatNameOutput = if ($FormatNameRaw) { $FormatNameRaw.Trim().TrimEnd(',') } else { "" }
+
+        # Get video duration in seconds
         $Duration = 0
         try {
-            $DurationRaw = & ffprobe -v error -show_entries format=duration -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
-            $DurationOutput = if ($DurationRaw) { $DurationRaw.Trim().TrimEnd(',') } else { "" }
             $Duration = if ($DurationOutput) { [double]$DurationOutput } else { 0 }
         } catch {
             $Duration = 0
@@ -140,6 +178,51 @@ function Get-VideoMetadata {
             }
         }
 
+        # Get file size
+        $FileInfo = Get-Item -LiteralPath $FilePath -ErrorAction SilentlyContinue
+        $Size = if ($FileInfo) { $FileInfo.Length } else { 0 }
+
+        # Parse audio bitrate
+        $AudioBitrate = 0
+        if ($AudioBitrateOutput -and $AudioBitrateOutput -ne "N/A" -and $AudioBitrateOutput -match "^\d+$") {
+            try {
+                $AudioBitrate = [int64]$AudioBitrateOutput
+            } catch {
+                $AudioBitrate = 0
+            }
+        }
+
+        # Parse audio channels
+        $AudioChannels = 0
+        if ($AudioChannelsOutput) {
+            try {
+                $AudioChannels = [int]$AudioChannelsOutput
+            } catch {
+                $AudioChannels = 0
+            }
+        }
+
+        # Build comprehensive color space string
+        $ColorSpaceStr = "unknown"
+        $ColorParts = @()
+
+        if ($ColorSpaceOutput -and $ColorSpaceOutput -ne "unknown" -and $ColorSpaceOutput -ne "") {
+            $ColorParts += $ColorSpaceOutput
+        }
+        if ($ColorPrimariesOutput -and $ColorPrimariesOutput -ne "unknown" -and $ColorPrimariesOutput -ne "") {
+            $ColorParts += $ColorPrimariesOutput
+        }
+        if ($ColorTransferOutput -and $ColorTransferOutput -ne "unknown" -and $ColorTransferOutput -ne "") {
+            $ColorParts += $ColorTransferOutput
+        }
+        if ($ColorRangeOutput -and $ColorRangeOutput -ne "unknown" -and $ColorRangeOutput -ne "") {
+            $ColorParts += $ColorRangeOutput
+        }
+
+        if ($ColorParts.Count -gt 0) {
+            $ColorSpaceStr = $ColorParts -join " / "
+        }
+
         return @{
             Width = $Width
             Height = $Height
@@ -149,11 +232,43 @@ function Get-VideoMetadata {
             Resolution = "${Width}x${Height}"
             SourceBitDepth = $SourceBitDepth
             Duration = $Duration
+            Size = $Size
+            VideoCodec = if ($VideoCodecOutput) { $VideoCodecOutput } else { "unknown" }
+            PixelFormat = if ($PixelFormatOutput) { $PixelFormatOutput } else { "unknown" }
+            ColorSpace = $ColorSpaceStr
+            ColorSpaceRaw = if ($ColorSpaceOutput) { $ColorSpaceOutput } else { "unknown" }
+            ColorPrimaries = if ($ColorPrimariesOutput) { $ColorPrimariesOutput } else { "unknown" }
+            ColorTransfer = if ($ColorTransferOutput) { $ColorTransferOutput } else { "unknown" }
+            ColorRange = if ($ColorRangeOutput) { $ColorRangeOutput } else { "unknown" }
+            AudioCodec = if ($AudioCodecOutput) { $AudioCodecOutput } else { "none" }
+            AudioBitrate = $AudioBitrate
+            AudioChannels = $AudioChannels
+            AudioSampleRate = if ($AudioSampleRateOutput) { $AudioSampleRateOutput } else { "0" }
+            FormatName = if ($FormatNameOutput) { $FormatNameOutput } else { "unknown" }
         }
     } catch {
         Write-Host "  Warning: Could not read video metadata - $($_.Exception.Message)" -ForegroundColor Yellow
         return $null
     }
+}
+
+# Function to format duration as HH:MM:SS
+function Format-Duration {
+    param([double]$Seconds)
+
+    if ($Seconds -eq 0) {
+        return "N/A"
+    }
+
+    $Hours = [math]::Floor($Seconds / 3600)
+    $Minutes = [math]::Floor(($Seconds % 3600) / 60)
+    $Secs = [math]::Floor($Seconds % 60)
+
+    $HoursStr = $Hours.ToString("00")
+    $MinutesStr = $Minutes.ToString("00")
+    $SecsStr = $Secs.ToString("00")
+
+    return $HoursStr + ":" + $MinutesStr + ":" + $SecsStr
 }
 
 # Function to calculate MaxRate and BufSize based on average bitrate (best practices)
