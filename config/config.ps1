@@ -38,6 +38,7 @@ $PreviewDuration = 10              # Test conversion duration (10 seconds recomm
 # Start position for test clip (in seconds from video start)
 # "middle" = extract from middle of video, or specify seconds (e.g., 30 for 30 seconds from start)
 $PreviewStartPosition = "middle"
+$VMAF_Subsample = 100             # n_subsample for VMAF (1-500, lower = more accurate but slower)
 
 # ============================================================================
 # CODEC SELECTION

@@ -111,7 +111,7 @@ function Test-ConversionQuality {
         $vmafArgs = @(
             "-i", $tempSource,
             "-i", $tempEncoded,
-            "-lavfi", "[1:v][0:v]libvmaf=n_subsample=10",
+            "-lavfi", "[1:v][0:v]libvmaf=n_subsample=$VMAF_Subsample",
             "-f", "null",
             "-"
         )

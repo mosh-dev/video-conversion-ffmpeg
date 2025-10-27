@@ -11,7 +11,7 @@
 
 # Default Quality Metrics (these are shown in the UI by default)
 # You can modify these defaults and adjust them in the UI before starting analysis
-$EnableVMAF = $false             # VMAF: Most accurate perceptual quality metric (slowest, requires libvmaf)
+$EnableVMAF = $true              # VMAF: Most accurate perceptual quality metric (slowest, requires libvmaf)
 $EnableSSIM = $true              # SSIM: Structural similarity index (moderate speed) - DEFAULT SELECTED
 $EnablePSNR = $true              # PSNR: Peak signal-to-noise ratio (fastest) - DEFAULT SELECTED
 

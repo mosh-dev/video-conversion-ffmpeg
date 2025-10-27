@@ -507,10 +507,8 @@ public class WindowHelper {
     $UpdateVMAFPanelVisibility = {
         if ($vmafCheckBox.IsChecked) {
             $vmafSubsamplePanel.Visibility = [System.Windows.Visibility]::Visible
-            $window.Height = 750
         } else {
             $vmafSubsamplePanel.Visibility = [System.Windows.Visibility]::Collapsed
-            $window.Height = 600
         }
     }
 
