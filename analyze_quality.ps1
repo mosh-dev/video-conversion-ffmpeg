@@ -84,88 +84,74 @@ function Compare-VideoQuality {
 
     $scalingNeeded = ($sourceInfo.Width -ne $encodedInfo.Width -or $sourceInfo.Height -ne $encodedInfo.Height)
 
-    # Build filter chain for all enabled metrics in single pass
-    $filterChain = @()
+    # Count enabled metrics
+    $metricCount = 0
+    if ($EnableVMAF) { $metricCount++ }
+    if ($EnableSSIM) { $metricCount++ }
+    if ($EnablePSNR) { $metricCount++ }
 
-    # Determine base video streams
-    $refStream = "[0:v]"
-    $distStream = "[1:v]"
-
-    # If scaling needed, scale reference video first
-    if ($scalingNeeded) {
-        $filterChain += "${refStream}scale=$($encodedInfo.Width):$($encodedInfo.Height):flags=bicubic[ref]"
-        $refStream = "[ref]"
-    }
-
-    # Build metric filters
-    if ($EnableVMAF) {
-        $filterChain += "${distStream}${refStream}libvmaf[vmafout]"
-    }
-
-    if ($EnableSSIM) {
-        $filterChain += "${refStream}${distStream}ssim[ssimout]"
-    }
-
-    if ($EnablePSNR) {
-        $filterChain += "${refStream}${distStream}psnr[psnrout]"
-    }
-
-    # If only one metric is enabled, simplify filter chain
+    # Build filter string based on enabled metrics
     $filterString = ""
-    if ($filterChain.Count -eq 1) {
-        $filterString = $filterChain[0] -replace '\[.*out\]$', ''
-    } else {
-        # Multiple metrics: split and merge (complex filter graph)
-        $splitCount = $filterChain.Count
 
+    if ($metricCount -eq 1) {
+        # Single metric - simple filter chain
         if ($scalingNeeded) {
-            # With scaling: scale first, then split both streams
-            $filterString = "${refStream}scale=$($encodedInfo.Width):$($encodedInfo.Height):flags=bicubic[ref];[ref]split=${splitCount}"
-            for ($i = 0; $i -lt $splitCount; $i++) {
-                $filterString += "[ref$i]"
-            }
-            $filterString += ";${distStream}split=${splitCount}"
-            for ($i = 0; $i -lt $splitCount; $i++) {
-                $filterString += "[dist$i]"
-            }
-
-            # Add metric filters
-            for ($i = 0; $i -lt $splitCount; $i++) {
-                $filterString += ";"
-                if ($EnableVMAF -and $i -eq 0) {
-                    $filterString += "[dist0][ref0]libvmaf=n_subsample=$VMAF_Subsample"
-                } elseif ($EnableSSIM -and (($EnableVMAF -and $i -eq 1) -or (-not $EnableVMAF -and $i -eq 0))) {
-                    $idx = if ($EnableVMAF) { "1" } else { "0" }
-                    $filterString += "[ref${idx}][dist${idx}]ssim"
-                } elseif ($EnablePSNR) {
-                    $idx = if ($EnableVMAF -and $EnableSSIM) { "2" } elseif ($EnableVMAF -or $EnableSSIM) { "1" } else { "0" }
-                    $filterString += "[ref${idx}][dist${idx}]psnr"
-                }
+            # Scale reference video to match encoded resolution
+            if ($EnableVMAF) {
+                $filterString = "[0:v]scale=$($encodedInfo.Width):$($encodedInfo.Height):flags=bicubic[ref];[1:v][ref]libvmaf=n_subsample=$VMAF_Subsample"
+            } elseif ($EnableSSIM) {
+                $filterString = "[0:v]scale=$($encodedInfo.Width):$($encodedInfo.Height):flags=bicubic[ref];[ref][1:v]ssim"
+            } elseif ($EnablePSNR) {
+                $filterString = "[0:v]scale=$($encodedInfo.Width):$($encodedInfo.Height):flags=bicubic[ref];[ref][1:v]psnr"
             }
         } else {
-            # No scaling: split both streams directly
-            $filterString = "[0:v]split=${splitCount}"
-            for ($i = 0; $i -lt $splitCount; $i++) {
+            # No scaling needed
+            if ($EnableVMAF) {
+                $filterString = "[1:v][0:v]libvmaf=n_subsample=$VMAF_Subsample"
+            } elseif ($EnableSSIM) {
+                $filterString = "[0:v][1:v]ssim"
+            } elseif ($EnablePSNR) {
+                $filterString = "[0:v][1:v]psnr"
+            }
+        }
+    } else {
+        # Multiple metrics - need to split streams
+        if ($scalingNeeded) {
+            # Scale first, then split
+            $filterString = "[0:v]scale=$($encodedInfo.Width):$($encodedInfo.Height):flags=bicubic[ref];"
+            $filterString += "[ref]split=$metricCount"
+            for ($i = 0; $i -lt $metricCount; $i++) {
                 $filterString += "[ref$i]"
             }
-            $filterString += ";[1:v]split=${splitCount}"
-            for ($i = 0; $i -lt $splitCount; $i++) {
+            $filterString += ";[1:v]split=$metricCount"
+            for ($i = 0; $i -lt $metricCount; $i++) {
                 $filterString += "[dist$i]"
             }
-
-            # Add metric filters
-            for ($i = 0; $i -lt $splitCount; $i++) {
-                $filterString += ";"
-                if ($EnableVMAF -and $i -eq 0) {
-                    $filterString += "[dist0][ref0]libvmaf=n_subsample=$VMAF_Subsample"
-                } elseif ($EnableSSIM -and (($EnableVMAF -and $i -eq 1) -or (-not $EnableVMAF -and $i -eq 0))) {
-                    $idx = if ($EnableVMAF) { "1" } else { "0" }
-                    $filterString += "[ref${idx}][dist${idx}]ssim"
-                } elseif ($EnablePSNR) {
-                    $idx = if ($EnableVMAF -and $EnableSSIM) { "2" } elseif ($EnableVMAF -or $EnableSSIM) { "1" } else { "0" }
-                    $filterString += "[ref${idx}][dist${idx}]psnr"
-                }
+        } else {
+            # Split both streams
+            $filterString = "[0:v]split=$metricCount"
+            for ($i = 0; $i -lt $metricCount; $i++) {
+                $filterString += "[ref$i]"
             }
+            $filterString += ";[1:v]split=$metricCount"
+            for ($i = 0; $i -lt $metricCount; $i++) {
+                $filterString += "[dist$i]"
+            }
+        }
+
+        # Add metric filters
+        $idx = 0
+        if ($EnableVMAF) {
+            $filterString += ";[dist$idx][ref$idx]libvmaf=n_subsample=$VMAF_Subsample"
+            $idx++
+        }
+        if ($EnableSSIM) {
+            $filterString += ";[ref$idx][dist$idx]ssim"
+            $idx++
+        }
+        if ($EnablePSNR) {
+            $filterString += ";[ref$idx][dist$idx]psnr"
+            $idx++
         }
     }
 
@@ -194,68 +180,91 @@ function Compare-VideoQuality {
 
         # Run ffmpeg with progress tracking
         Write-Host "  Progress: 0%" -NoNewline -ForegroundColor Yellow
-        $ffmpegOutput = ""
-        $process = Start-Process -FilePath "ffmpeg" -ArgumentList $ffmpegArgs -NoNewWindow -PassThru -RedirectStandardError "nul" -Wait -ErrorAction SilentlyContinue
 
-        # Capture ffmpeg output for progress and metrics
+        # Use Start-Job to capture ffmpeg output (including stderr)
         $captureJob = Start-Job -ScriptBlock {
-            param($args)
-            & ffmpeg @args 2>&1
+            param($argList)
+            & ffmpeg @argList 2>&1
         } -ArgumentList (,$ffmpegArgs)
 
         # Track progress
         $lastProgress = 0
+        $ffmpegOutput = ""
+
         while ($captureJob.State -eq 'Running') {
-            $output = Receive-Job -Job $captureJob -ErrorAction SilentlyContinue
+            $output = Receive-Job -Job $captureJob -Keep -ErrorAction SilentlyContinue
+
             if ($output) {
-                $ffmpegOutput += $output | Out-String
+                # Parse progress from ffmpeg stderr output
+                $outputStr = $output | Out-String
 
-                # Parse progress from ffmpeg output
-                foreach ($line in $output) {
-                    if ($line -match "time=(\d+):(\d+):(\d+)") {
-                        $hours = [int]$matches[1]
-                        $minutes = [int]$matches[2]
-                        $seconds = [int]$matches[3]
-                        $currentTime = $hours * 3600 + $minutes * 60 + $seconds
+                # Look for time= in the output (ffmpeg progress format: time=00:00:05.23)
+                if ($outputStr -match "time=(\d+):(\d+):(\d+)\.?\d*") {
+                    $hours = [int]$matches[1]
+                    $minutes = [int]$matches[2]
+                    $seconds = [int]$matches[3]
+                    $currentTime = $hours * 3600 + $minutes * 60 + $seconds
 
-                        if ($sourceInfo.Duration -gt 0) {
-                            $progress = [Math]::Min(100, [Math]::Round(($currentTime / $sourceInfo.Duration) * 100))
-                            if ($progress -gt $lastProgress) {
-                                $lastProgress = $progress
-                                Write-Host "`r  Progress: $progress%" -NoNewline -ForegroundColor Yellow
-                            }
+                    if ($sourceInfo.Duration -gt 0) {
+                        $progress = [Math]::Min(100, [Math]::Round(($currentTime / $sourceInfo.Duration) * 100))
+                        if ($progress -gt $lastProgress) {
+                            $lastProgress = $progress
+                            Write-Host "`r  Progress: $progress%" -NoNewline -ForegroundColor Yellow
                         }
                     }
                 }
             }
-            Start-Sleep -Milliseconds 100
+            Start-Sleep -Milliseconds 200
         }
 
         # Get final output
-        $ffmpegOutput += Receive-Job -Job $captureJob | Out-String
+        $ffmpegOutput = Receive-Job -Job $captureJob | Out-String
         Remove-Job -Job $captureJob -Force
 
-        Write-Host "`r  Progress: 100% - Complete" -ForegroundColor Green
+        Write-Host "`r  Progress: 100% - Complete                " -ForegroundColor Green
 
-        # Parse metrics
+        # Parse metrics from ffmpeg output
         $vmaf = $null
         $ssim = $null
         $psnr = $null
 
-        if ($EnableVMAF -and $ffmpegOutput -match "VMAF score:\s*([\d.]+)") {
-            $vmaf = [math]::Round([double]$Matches[1], 2)
+        # VMAF parsing - case insensitive, multiple pattern attempts
+        if ($EnableVMAF) {
+            if ($ffmpegOutput -imatch "VMAF score:\s*([\d.]+)") {
+                $vmaf = [math]::Round([double]$Matches[1], 2)
+            } elseif ($ffmpegOutput -imatch "VMAF.*?mean:\s*([\d.]+)") {
+                $vmaf = [math]::Round([double]$Matches[1], 2)
+            }
         }
 
-        if ($EnableSSIM -and $ffmpegOutput -match "All:\s*([\d.]+)\s+\(.*SSIM") {
-            $ssim = [math]::Round([double]$Matches[1], 4)
+        # SSIM parsing - case insensitive, multiple pattern attempts
+        if ($EnableSSIM) {
+            # Match typical SSIM output: "All:0.XXXX (XX.XXXX dB)"
+            if ($ffmpegOutput -imatch "All:\s*(0\.\d+)") {
+                $ssim = [math]::Round([double]$Matches[1], 4)
+            }
         }
 
-        if ($EnablePSNR -and $ffmpegOutput -match "average:\s*([\d.]+).*psnr") {
-            $psnr = [math]::Round([double]$Matches[1], 2)
+        # PSNR parsing - case insensitive, multiple pattern attempts
+        if ($EnablePSNR) {
+            # Match typical PSNR output: "average:XX.XX"
+            if ($ffmpegOutput -imatch "average:\s*([\d.]+)") {
+                $psnr = [math]::Round([double]$Matches[1], 2)
+            }
         }
 
         $elapsedTime = ((Get-Date) - $startTime).TotalSeconds
 
+        # Debug: Save ffmpeg output if no metrics were parsed
+        if (($EnableVMAF -and $null -eq $vmaf) -or ($EnableSSIM -and $null -eq $ssim) -or ($EnablePSNR -and $null -eq $psnr)) {
+            $debugFile = Join-Path $ReportDir "debug_ffmpeg_output_$(Get-Date -Format 'yyyy-MM-dd_HH-mm-ss').txt"
+            $ffmpegOutput | Out-File -FilePath $debugFile -Encoding UTF8
+            Write-Host ""
+            Write-Host "  Warning: Some metrics could not be parsed. Debug output saved to:" -ForegroundColor Yellow
+            Write-Host "  $debugFile" -ForegroundColor Gray
+        }
+
+        Write-Host ""
         Write-Host "  Analysis completed in $([math]::Round($elapsedTime, 1))s" -ForegroundColor Green
 
         return @{
