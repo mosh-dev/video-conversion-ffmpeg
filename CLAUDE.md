@@ -4,26 +4,38 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Purpose
 
-This is a video conversion workspace for batch converting video files from various formats (MP4, MOV, MKV, WMV, AVI, FLV, 3GP, TS, M2TS, WebM, and more) to AV1 or HEVC format using ffmpeg with intelligent hardware acceleration. The tool features an interactive GUI launcher, automatic hardware acceleration fallback, audio compatibility handling, and comprehensive parameter customization.
+This is a video conversion workspace for batch converting video files from various formats (MP4, MOV, MKV, WMV, AVI, FLV, 3GP, TS, M2TS, WebM, and more) to AV1 or HEVC format using ffmpeg with intelligent hardware acceleration. The tool features an interactive GUI launcher, 10-second VMAF quality preview before each conversion, automatic hardware acceleration fallback, audio compatibility handling, multi-metric quality validation (VMAF/SSIM/PSNR), and comprehensive parameter customization.
 
 ## Architecture
 
 The codebase is organized into modular components:
 
-- **`convert_videos.ps1`** - Main conversion script orchestrating the entire process
-- **`analyze_quality.ps1`** - Quality validation tool using VMAF/SSIM/PSNR metrics
+- **`convert_videos.ps1`** - Main conversion script with integrated 10-second VMAF quality preview
+- **`analyze_quality.ps1`** - Quality validation tool using VMAF/SSIM/PSNR metrics (user-selectable via GUI)
 - **`view_reports.ps1`** - Interactive report viewer for browsing and displaying JSON quality reports
 - **`config/config.ps1`** - Centralized configuration file with all user-modifiable parameters
 - **`config/codec_mappings.ps1`** - Container/codec compatibility mappings and validation functions
 - **`config/quality_analyzer_config.ps1`** - Quality analyzer configuration settings
-- **`lib/conversion_helpers.ps1`** - Helper functions for metadata detection, parameter selection, and bitrate calculation
+- **`lib/helpers.ps1`** - Helper functions for metadata detection, parameter selection, and bitrate calculation
+- **`lib/quality_preview_helper.ps1`** - 10-second VMAF test conversion functions
 - **`lib/show_conversion_ui.ps1`** - Modern Windows 11-style GUI for interactive parameter selection
+- **`lib/show_quality_analyzer_ui.ps1`** - GUI for quality analyzer metric selection
 
 This modular separation allows users to modify settings in `config.ps1` without touching the core logic, and makes the codebase maintainable with clear separation of concerns.
 
 ### Key Design Patterns
 
-1. **Codec/Container Compatibility Mapping** (NEW): Centralized configuration for all codec/container rules:
+1. **Quality Preview with VMAF** (NEW): Before each full conversion, optionally run a 10-second test encode:
+   - Extracts a 10-second clip from the video (configurable start position: "middle" or specific second)
+   - Encodes the clip with the same settings as the full conversion
+   - Runs VMAF analysis to predict quality (0-100 scale)
+   - Displays color-coded score: Excellent (95+), Very Good (90-95), Acceptable (80-90), Poor (<80)
+   - Helps users validate encoding settings before committing to full conversion
+   - Configurable in `config/config.ps1`: `$EnableQualityPreview`, `$PreviewDuration`, `$PreviewStartPosition`, `$VMAF_Subsample`
+   - Requires ffmpeg with libvmaf support
+   - Implemented in `lib/quality_preview_helper.ps1` with function `Test-ConversionQuality`
+
+2. **Codec/Container Compatibility Mapping**: Centralized configuration for all codec/container rules:
    - All compatibility rules defined in `config/codec_mappings.ps1`
    - Simple approach: Only define `SupportedVideoCodecs` and `SupportedAudioCodecs` - anything else is incompatible
    - Helper functions: `Test-CodecContainerCompatibility`, `Test-AudioContainerCompatibility`, `Get-SkipReason`
@@ -32,19 +44,19 @@ This modular separation allows users to modify settings in `config.ps1` without 
    - Self-documenting: each container includes description and default audio codec
    - Benefits: Single source of truth, DRY principle, reduced hardcoded logic, easier maintenance
 
-2. **Hardware Acceleration Fallback**: Three-tier acceleration strategy for maximum compatibility:
+3. **Hardware Acceleration Fallback**: Three-tier acceleration strategy for maximum compatibility:
    - **CUDA (NVDEC)**: Primary method for H.264, HEVC, VP8, VP9, AV1, MPEG-1/2/4, VC-1, MJPEG
    - **D3D11VA**: Windows-native fallback for FLV, 3GP, DIVX, or when CUDA fails
    - **Software Decoding**: Final fallback for universal compatibility
    - Automatically selects best available method per video format
 
-3. **Dynamic Parameter Selection**: Two-stage matching algorithm for encoding parameters:
+4. **Dynamic Parameter Selection**: Two-stage matching algorithm for encoding parameters:
    - Stage 1: Match video width to highest applicable `ResolutionMin` tier
    - Stage 2: Within that tier, find the best FPS range match (exact or closest)
    - Applies `$BitrateModifier` to all bitrate values for fine-tuning
    - Implemented in `Get-DynamicParameters` function in `conversion_helpers.ps1`
 
-4. **Audio Compatibility Handling**: Intelligent audio codec detection and re-encoding:
+5. **Audio Compatibility Handling**: Intelligent audio codec detection and re-encoding:
    - Uses ffprobe to detect actual audio codec (not file extension guessing)
    - Automatically re-encodes incompatible codecs even when "Copy original audio" is selected
    - Detects WMA (wmav1, wmav2, wmapro, wmalossless), Vorbis, DTS, PCM variants
@@ -53,7 +65,7 @@ This modular separation allows users to modify settings in `config.ps1` without 
    - Prevents "silent video" issues in browsers and mobile devices
    - Implemented in lines 216-265 of `convert_videos.ps1`
 
-5. **Container/Codec Compatibility Validation**: Prevents incompatible codec/container combinations:
+6. **Container/Codec Compatibility Validation**: Prevents incompatible codec/container combinations:
    - Validates codec support when "Preserve original container" is enabled
    - Automatically skips files with incompatible combinations with clear error messages
    - Container restrictions:
@@ -67,19 +79,19 @@ This modular separation allows users to modify settings in `config.ps1` without 
      - OGV: blocks HEVC
    - Implemented in lines 159-184 of `convert_videos.ps1`
 
-6. **Filename Collision Detection**: Prevents overwriting when converting container formats:
+7. **Filename Collision Detection**: Prevents overwriting when converting container formats:
    - Detects when multiple source files with different extensions would produce same output name
    - Example: `video.ts` and `video.m2ts` both converting to `video.mp4`
    - Automatically renames with original extension: `video_ts.mp4`, `video_m2ts.mp4`
 
-7. **File Path Handling**: Robust handling of special characters:
+8. **File Path Handling**: Robust handling of special characters:
    - Uses `-LiteralPath` with `Test-Path` to avoid wildcard interpretation of `[]` brackets
    - Uses `Join-Path` for cross-platform path construction
    - Uses UTF-8 encoding without BOM for all file operations
 
-8. **Codec Abstraction**: User-friendly codec selection (`AV1`, `HEVC`) maps to ffmpeg codec names (`av1_nvenc`, `hevc_nvenc`) via `$CodecMap` hashtable
+9. **Codec Abstraction**: User-friendly codec selection (`AV1`, `HEVC`) maps to ffmpeg codec names (`av1_nvenc`, `hevc_nvenc`) via `$CodecMap` hashtable
 
-9. **MKV Stream Mapping**: Special handling for MKV files with complex streams:
+10. **MKV Stream Mapping**: Special handling for MKV files with complex streams:
    - Maps all streams (`-map 0`) to preserve video, audio, subtitles, and metadata
    - Adds `-fflags +genpts` to generate presentation timestamps
    - Uses `-ignore_unknown` to skip unsupported stream types
@@ -113,10 +125,14 @@ Default values are loaded from `config.ps1` and can be adjusted before starting 
 .\analyze_quality.ps1
 ```
 
-The quality validation script validates re-encoded video quality using the SSIM (Structural Similarity Index) metric:
+The quality validation script validates re-encoded video quality using industry-standard metrics. Users can select which metrics to enable via an interactive GUI:
 
-**Metric Used:**
-- **SSIM** (Structural Similarity Index) - Measures structural similarity between source and encoded video (0-1 scale)
+**Supported Metrics:**
+- **VMAF** (Video Multimethod Assessment Fusion) - Netflix's perceptual quality metric (0-100 scale, most accurate but slowest, requires libvmaf)
+- **SSIM** (Structural Similarity Index) - Measures structural similarity between source and encoded video (0-1 scale, moderate speed)
+- **PSNR** (Peak Signal-to-Noise Ratio) - Simple quality metric (dB scale, fastest)
+
+**Priority Order for Assessment:** VMAF (if enabled) > SSIM (if enabled) > PSNR (if enabled)
 
 **Features:**
 - Automatic file matching between `input_files/` and `output_files/` directories
@@ -124,21 +140,38 @@ The quality validation script validates re-encoded video quality using the SSIM 
 - Color-coded console output based on quality thresholds
 - JSON report generation in `reports/` directory
 - Comprehensive statistics: compression ratio, bitrate comparison, quality distribution
+- Interactive GUI for selecting which metrics to enable
 
-**Quality Thresholds (SSIM-based):**
+**Quality Thresholds:**
+
+VMAF (0-100 scale):
+- Excellent: VMAF ≥ 95 (visually lossless)
+- Very Good: VMAF ≥ 90 (minimal artifacts)
+- Acceptable: VMAF ≥ 80
+- Poor: VMAF < 80
+
+SSIM (0-1 scale):
 - Excellent: SSIM ≥ 0.98 (visually lossless)
 - Very Good: SSIM ≥ 0.95 (minimal artifacts)
 - Acceptable: SSIM ≥ 0.90
 - Poor: SSIM < 0.90
 
+PSNR (dB scale):
+- Excellent: PSNR ≥ 45 dB
+- Very Good: PSNR ≥ 40 dB
+- Acceptable: PSNR ≥ 35 dB
+- Poor: PSNR < 35 dB
+
 **Requirements:**
-- ffmpeg (standard builds work - no special plugins required)
+- ffmpeg (standard builds for SSIM/PSNR, libvmaf-enabled build required for VMAF)
+- To check for libvmaf support: `ffmpeg -filters 2>&1 | Select-String libvmaf`
 
 **Performance:**
-- Quality analysis is CPU-intensive (1-3x video duration)
+- Quality analysis is CPU-intensive (1-5x video duration depending on metrics)
+- VMAF is slowest (requires libvmaf), PSNR is fastest
 - No GPU acceleration available for quality metrics
 - Scales videos to matching resolution if needed for comparison
-- Single-pass SSIM analysis for faster results compared to multi-metric tools
+- Can run multiple metrics in parallel for comprehensive analysis
 
 ## Report Viewer Tool
 
@@ -168,12 +201,17 @@ All parameters are configured in `config/config.ps1`:
 **Essential Settings:**
 - `$OutputCodec` - Choose "AV1" or "HEVC" codec (can be overridden in GUI)
 - `$SkipExistingFiles` - Set to `$true` to skip already-converted files (recommended)
-- `$UseDynamicParameters` - Enable resolution/FPS-based parameter adjustment
 - `$PreserveContainer` - Keep original container format (can be overridden in GUI)
 - `$PreserveAudio` - Copy audio without re-encoding (can be overridden in GUI; automatically disabled for incompatible combinations)
 - `$AudioCodec` - Choose "opus" or "aac" for audio encoding
 - `$BitrateModifier` - Global bitrate multiplier, adjustable via GUI slider (0.1x to 3.0x)
 - `$FileExtensions` - Array of input file patterns to process (supports all video formats)
+
+**Quality Preview Settings (NEW):**
+- `$EnableQualityPreview` - Set to `$true` to enable 10-second VMAF test before each conversion
+- `$PreviewDuration` - Duration of test clip in seconds (default: 10)
+- `$PreviewStartPosition` - Start position for test clip: "middle" or number of seconds from start
+- `$VMAF_Subsample` - VMAF n_subsample value (1-500, lower = more accurate but slower, default: 100)
 
 **Parameter Profiles:**
 
@@ -192,6 +230,7 @@ The `$AudioCodecMap` hashtable maps user-friendly names to ffmpeg codec names:
 
 ### Core Functionality
 - **Interactive GUI launcher** (Modern Windows 11 UI) with parameter selection before conversion starts
+- **10-second VMAF quality preview** (NEW): Test encode before full conversion with color-coded quality assessment
 - **Wide format support**: MP4, MOV, MKV, WMV, AVI, FLV, 3GP, TS, M2TS, M4V, WebM, DIVX, and more
 - **Hardware acceleration fallback**: CUDA → D3D11VA → Software (automatic per-file selection)
 - Automatic video metadata detection (resolution, framerate, bitrate) via ffprobe
@@ -219,6 +258,9 @@ The `$AudioCodecMap` hashtable maps user-friendly names to ffmpeg codec names:
 
 - Windows PowerShell 5.1 or later
 - ffmpeg with NVIDIA hardware acceleration support
+  - Standard builds support SSIM/PSNR quality analysis
+  - Builds with libvmaf support required for VMAF quality preview and analysis
+  - Check for libvmaf: `ffmpeg -filters 2>&1 | Select-String libvmaf`
 - NVIDIA GPU with NVENC support:
   - AV1 encoding: RTX 40-series or newer
   - HEVC encoding: GTX 10-series or newer
@@ -379,14 +421,16 @@ VideoConversion/
 ├── logs/                 # Conversion logs (timestamped)
 ├── reports/              # Quality validation reports (JSON)
 ├── config/
-│   ├── config.ps1                  # User configuration
-│   ├── codec_mappings.ps1          # Codec/container compatibility mappings
-│   └── quality_analyzer_config.ps1 # Quality analyzer settings
+│   ├── config.ps1                      # User configuration
+│   ├── codec_mappings.ps1              # Codec/container compatibility mappings
+│   └── quality_analyzer_config.ps1     # Quality analyzer settings
 ├── lib/
-│   ├── conversion_helpers.ps1   # Helper functions
-│   └── show_conversion_ui.ps1   # GUI interface
-├── convert_videos.ps1    # Main conversion script
-├── analyze_quality.ps1   # Quality validation tool
+│   ├── helpers.ps1                     # Helper functions (metadata, bitrate calculations)
+│   ├── quality_preview_helper.ps1      # 10-second VMAF test functions
+│   ├── show_conversion_ui.ps1          # Main conversion GUI interface
+│   └── show_quality_analyzer_ui.ps1    # Quality analyzer GUI interface
+├── convert_videos.ps1    # Main conversion script with quality preview
+├── analyze_quality.ps1   # Quality validation tool (VMAF/SSIM/PSNR)
 ├── view_reports.ps1      # Quality report viewer
 ├── CLAUDE.md             # This file
 └── README.md             # User documentation

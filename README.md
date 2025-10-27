@@ -5,6 +5,7 @@ A powerful batch video conversion tool with GPU acceleration, featuring an inter
 ## Features
 
 - **GPU-Accelerated Encoding**: Leverage NVIDIA NVENC for fast AV1 and HEVC encoding
+- **10-Second Quality Preview**: Test encode with VMAF analysis before each full conversion to validate settings
 - **Hardware Acceleration Fallback**: Automatic fallback chain (CUDA → D3D11VA → Software) for maximum compatibility
 - **Wide Format Support**: Handles MP4, MOV, MKV, WMV, AVI, TS, M2TS, M4V, FLV, 3GP, and more
 - **Interactive GUI Launcher**: Configure all settings through an intuitive interface
@@ -17,7 +18,7 @@ A powerful batch video conversion tool with GPU acceleration, featuring an inter
 - **Resume Support**: Automatically skips already-converted files
 - **Crash Recovery**: Cleans up incomplete conversions from previous runs
 - **Collision Detection**: Prevents filename conflicts when converting between container formats
-- **Quality Comparison Tool**: Validate re-encoded video quality using VMAF, SSIM, and PSNR metrics
+- **Quality Comparison Tool**: Validate re-encoded video quality using VMAF, SSIM, and/or PSNR metrics (user-selectable)
 
 ## Requirements
 
@@ -29,6 +30,10 @@ A powerful batch video conversion tool with GPU acceleration, featuring an inter
 ### Software
 - Windows PowerShell 5.1 or later
 - ffmpeg with NVIDIA CUDA hardware acceleration
+  - Standard builds support SSIM/PSNR quality analysis
+  - Builds with libvmaf support required for quality preview and VMAF analysis
+  - Check for libvmaf: `ffmpeg -filters 2>&1 | Select-String libvmaf`
+  - Download libvmaf-enabled builds from [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds/releases) (choose GPL builds)
 - CUDA drivers
 - .NET Framework (for GUI)
 
@@ -68,11 +73,12 @@ When you run the script, a GUI window appears with the following options:
 - This setting overrides the preset values in `$ParameterMap` from config.ps1
 
 #### Container Format
-- **Convert all to MP4**: Converts all videos to MP4 format (universal compatibility)
-- **Convert all to MKV**: Converts all videos to MKV format (most flexible, supports all features)
+- **Convert all to MP4**: Converts all videos to MP4 format (universal compatibility, supports both AV1 and HEVC)
 - **Preserve original**: Keeps original format (mkv → mkv, mp4 → mp4)
   - Note: Audio encoding is automatically set to "Copy" when preserving container
   - Incompatible codec/container combinations are automatically skipped (e.g., AV1 in MOV, HEVC in WebM)
+
+**Note**: To output MKV files, set `$OutputExtension = ".mkv"` in `config/config.ps1` before launching the GUI
 
 ##### Container/Codec Compatibility Matrix
 
@@ -94,18 +100,18 @@ When you run the script, a GUI window appears with the following options:
 - **HEVC**: Works with 7 formats (MP4, MOV, MKV, TS, M2TS, M4V, AVI)
 - **AV1**: Works with 3 formats (MP4, MKV, WebM)
 
-**When converting to MP4 or MKV output format:**
+**When converting to MP4 output format:**
 
 | Output Format | HEVC Encoding | AV1 Encoding |
 |---------------|---------------|--------------|
 | MP4 | ✅ **All input formats work** | ✅ **All input formats work** |
-| MKV | ✅ **All input formats work** | ✅ **All input formats work** |
+
+**If you need MKV output**: Set `$OutputExtension = ".mkv"` in `config/config.ps1` before launching the script. MKV supports all input formats with both HEVC and AV1.
 
 **Recommendation:**
 - Use **"Preserve original container"** with **HEVC** for maximum format compatibility (7 formats work)
 - Use **"Convert to MP4"** with **either codec** for universal player compatibility
-- Use **"Convert to MKV"** with **either codec** for maximum flexibility (supports all features like subtitles)
-- MP4 and MKV are the most flexible containers supporting both HEVC and AV1
+- Use **MKV output** (via config.ps1) with **either codec** for maximum flexibility (supports all features like subtitles)
 
 #### Video Bitrate Multiplier
 - Slider from **0.1x to 3.0x**
@@ -126,9 +132,9 @@ When you run the script, a GUI window appears with the following options:
     - Automatically uses 48 kHz for sources higher than 48 kHz or unsupported rates
     - Ensures optimal compatibility without quality loss
 
-### Advanced Configuration (config.ps1)
+### Advanced Configuration (config/config.ps1)
 
-Edit `config.ps1` to customize:
+Edit `config/config.ps1` to customize:
 
 ```powershell
 # Processing Options
@@ -141,6 +147,12 @@ $OutputCodec = "AV1"               # "AV1" or "HEVC"
 # Encoding Preset (can be changed in GUI)
 $DefaultPreset = "p6"              # "p1" to "p7" (p1=fastest, p7=slowest/best)
 
+# Quality Preview (10-second VMAF test before each conversion)
+$EnableQualityPreview = $true      # Enable/disable quality preview
+$PreviewDuration = 10              # Duration of test clip in seconds
+$PreviewStartPosition = "middle"   # "middle" or number of seconds from start
+$VMAF_Subsample = 100              # VMAF subsample (1-500, lower=more accurate but slower)
+
 # Audio Settings
 $AudioCodec = "aac"                # "opus" or "aac"
 $DefaultAudioBitrate = "256k"      # AAC bitrate (adjustable in GUI: 96k-320k)
@@ -151,7 +163,6 @@ $PreserveContainer = $false        # Override in GUI
 $PreserveAudio = $false            # Override in GUI (auto re-encodes incompatible audio)
 
 # Dynamic Parameters
-$UseDynamicParameters = $true      # Enable resolution/FPS-based encoding
 $BitrateMultiplier = 1             # Override in GUI
 ```
 
@@ -184,10 +195,15 @@ VideoConversion/
 ├── _output_files/        # Converted videos appear here
 ├── logs/                 # Timestamped conversion logs
 ├── reports/              # Quality validation reports (JSON)
+├── config/
+│   ├── config.ps1                      # Configuration file
+│   ├── codec_mappings.ps1              # Codec/container compatibility
+│   └── quality_analyzer_config.ps1     # Quality analyzer settings
 ├── lib/
-│   ├── config.ps1        # Configuration file
-│   ├── conversion_helpers.ps1   # Helper functions
-│   └── show_conversion_ui.ps1   # GUI interface
+│   ├── helpers.ps1                     # Helper functions
+│   ├── quality_preview_helper.ps1      # Quality preview functions
+│   ├── show_conversion_ui.ps1          # Main conversion GUI
+│   └── show_quality_analyzer_ui.ps1    # Quality analyzer GUI
 ├── convert_videos.ps1    # Main conversion script
 ├── analyze_quality.ps1   # Quality validation tool
 ├── view_reports.ps1      # Quality report viewer
@@ -246,16 +262,32 @@ Browse and view saved quality reports:
   Container:           Preserve original
   Audio:               Re-encode to AAC @ 256kbps
   Skip Mode:           Skip existing
+  Quality Preview:     Enabled (10s VMAF test)
 ========================================
 
 [1/5] vacation_2024.mp4 (850.5 MB)
   Resolution: 3840x2160 @ 60fps | Profile: 4K 60fps+
   Settings: Bitrate=40M MaxRate=60M BufSize=80M Preset=p7
+
+  === QUALITY PREVIEW ===
+  Extracting 10-second test clip (from 150s)... Done
+  Encoding test clip... Done
+  Running VMAF analysis... Done
+
+  ~VMAF Score: 96.2 / 100 (Excellent)
+  Parameters: Codec=AV1 Preset=p7 Bitrate=40M
+  =======================
+
   Success: 02:15 | 425.3 MB | Compression: 2.0x (50.0% saved)
 
 [2/5] drone_footage.mov (1250.8 MB)
   Resolution: 2704x1524 @ 30fps | Profile: 2.7K 30fps
   Settings: Bitrate=25M MaxRate=40M BufSize=50M Preset=p6
+
+  === QUALITY PREVIEW ===
+  ~VMAF Score: 94.8 / 100 (Very Good)
+  =======================
+
   Success: 01:45 | 520.4 MB | Compression: 2.4x (58.4% saved)
 
 Done: 5 | Skipped: 0 | Errors: 0 | Time: 00:12:35
@@ -279,7 +311,7 @@ Each conversion run creates a timestamped log file in `logs/`:
 
 ## Quality Validation
 
-The `analyze_quality.ps1` script validates the visual quality of your re-encoded videos using industry-standard metrics.
+The `analyze_quality.ps1` script validates the visual quality of your re-encoded videos using industry-standard metrics. An interactive GUI allows you to select which metrics to enable.
 
 ### How to Use
 
@@ -288,23 +320,24 @@ The `analyze_quality.ps1` script validates the visual quality of your re-encoded
 ```
 
 The script will:
-1. Scan `_input_files/` and `_output_files/` directories
-2. Match source videos with their re-encoded versions (handles container changes)
-3. Calculate quality metrics using ffmpeg's libvmaf filter
-4. Generate console output with color-coded results
-5. Save detailed JSON report to `reports/quality_comparison_YYYY-MM-DD_HH-MM-SS.json`
+1. Show a GUI to select which metrics to enable (VMAF, SSIM, and/or PSNR)
+2. Scan `_input_files/` and `_output_files/` directories
+3. Match source videos with their re-encoded versions (handles container changes)
+4. Calculate selected quality metrics using ffmpeg
+5. Generate console output with color-coded results
+6. Save detailed JSON report to `reports/quality_comparison_YYYY-MM-DD_HH-MM-SS.json`
 
 ### Quality Metrics Explained
 
-**VMAF (Video Multimethod Assessment Fusion)**
+**VMAF (Video Multimethod Assessment Fusion)** - Most accurate, requires libvmaf
 - Scale: 0-100 (higher is better)
 - Netflix's perceptual quality metric
 - **95+**: Excellent (visually lossless)
 - **90-95**: Very good (minimal artifacts)
-- **85-90**: Acceptable quality
-- **<85**: Poor quality (consider higher bitrate)
+- **80-90**: Acceptable quality
+- **<80**: Poor quality (consider higher bitrate)
 
-**SSIM (Structural Similarity Index)**
+**SSIM (Structural Similarity Index)** - Good balance of speed and accuracy
 - Scale: 0-1.00 (higher is better)
 - Measures structural similarity between videos
 - **0.98+**: Excellent
@@ -312,13 +345,15 @@ The script will:
 - **0.90-0.95**: Acceptable
 - **<0.90**: Poor
 
-**PSNR (Peak Signal-to-Noise Ratio)**
+**PSNR (Peak Signal-to-Noise Ratio)** - Fastest, simple metric
 - Scale: dB (higher is better)
 - Simple quality metric
-- **40+ dB**: Excellent
-- **35-40 dB**: Very good
-- **30-35 dB**: Acceptable
-- **<30 dB**: Poor
+- **45+ dB**: Excellent
+- **40-45 dB**: Very good
+- **35-40 dB**: Acceptable
+- **<35 dB**: Poor
+
+**Priority Order for Assessment:** VMAF (if enabled) > SSIM (if enabled) > PSNR (if enabled)
 
 ### Sample Output
 
@@ -361,12 +396,14 @@ Quality Distribution:
   Acceptable:  0
   Poor:        0
 
-Report saved to: reports\quality_comparison_2025-01-15_16-30-45.csv
+Report saved to: reports\quality_comparison_2025-01-15_16-30-45.json
 ```
 
 ### Requirements
 
-**ffmpeg with libvmaf support** is required. Most standard ffmpeg builds don't include this.
+**ffmpeg requirements vary by metric:**
+- **SSIM/PSNR**: Standard ffmpeg builds work (no special requirements)
+- **VMAF**: Requires ffmpeg with libvmaf support
 
 **To get ffmpeg with libvmaf:**
 1. Download from [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds/releases)
@@ -380,10 +417,10 @@ ffmpeg -filters 2>&1 | Select-String libvmaf
 
 ### Performance Notes
 
-- Quality comparison is **much slower** than conversion (typically 1-5x video duration)
+- Quality comparison is **CPU-intensive** (1-5x video duration depending on metrics selected)
+- VMAF is slowest, PSNR is fastest, SSIM is in between
 - The script analyzes every frame of both videos
-- Expect ~5-10 minutes per comparison for a 1080p 60fps video
-- Uses 4 threads by default for faster processing
+- Expect longer analysis times for higher resolutions and when multiple metrics are enabled
 - No GPU acceleration available for quality metrics
 
 ### JSON Report Format
@@ -392,8 +429,9 @@ The JSON report includes:
 - File names and sizes
 - Compression ratio and space saved
 - Source and encoded resolution/bitrate
-- VMAF, SSIM, PSNR scores
-- Quality assessment (Excellent/Very Good/Acceptable/Poor)
+- Metrics scores (VMAF/SSIM/PSNR - whichever were enabled)
+- Quality assessment based on primary metric (Excellent/Very Good/Acceptable/Poor)
+- Analysis time per file
 
 Can be imported into analysis tools or viewed with `view_reports.ps1`.
 
@@ -424,16 +462,16 @@ The `view_reports.ps1` script provides an interactive way to browse and view sav
 
 Found 3 report(s):
 
-[1] quality_comparison_2025-01-15_16-30-45.csv (2025-01-15 16:30:45, 2.5 KB)
-[2] quality_comparison_2025-01-15_14-20-12.csv (2025-01-15 14:20:12, 1.8 KB)
-[3] quality_comparison_2025-01-14_22-15-30.csv (2025-01-14 22:15:30, 3.2 KB)
+[1] quality_comparison_2025-01-15_16-30-45.json (2025-01-15 16:30:45, 2.5 KB)
+[2] quality_comparison_2025-01-15_14-20-12.json (2025-01-15 14:20:12, 1.8 KB)
+[3] quality_comparison_2025-01-14_22-15-30.json (2025-01-14 22:15:30, 3.2 KB)
 
 Select a report [1-3] or 'Q' to quit: 1
 
 ========================================
   QUALITY COMPARISON REPORT
 ========================================
-Report: quality_comparison_2025-01-15_16-30-45.csv
+Report: quality_comparison_2025-01-15_16-30-45.json
 
 [1/2] vacation_2024
   Source:  vacation_2024.mov (850.5 MB)

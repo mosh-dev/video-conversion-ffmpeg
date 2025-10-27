@@ -13,7 +13,10 @@
       "Bash(dotnet restore:*)",
       "Bash(dotnet build:*)",
       "Bash(mkdir:*)",
-      "Read(//d/**)"
+      "Read(//d/**)",
+      "Bash(Get-ChildItem -Path D:VideoConversion -Recurse -File -Depth 2)",
+      "Bash(Select-Object FullName, Length)",
+      "Bash(Format-Table -AutoSize)"
     ],
     "deny": [],
     "ask": []
