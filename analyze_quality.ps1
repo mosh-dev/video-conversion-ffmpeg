@@ -178,18 +178,16 @@ function Compare-VideoQuality {
             "-"
         )
 
-        # Run ffmpeg and show output directly in console
+        # Run ffmpeg - output will show naturally in console
         Write-Host ""
 
-        # Use temporary file to capture output while showing it
-        $tempLogFile = Join-Path $env:TEMP "ffmpeg_$(Get-Date -Format 'yyyyMMddHHmmss').log"
-
-        # Run ffmpeg with Tee-Object to show AND save output
-        & ffmpeg @ffmpegArgs 2>&1 | Tee-Object -FilePath $tempLogFile
-
-        # Read captured output for parsing
-        $ffmpegOutput = Get-Content -Path $tempLogFile -Raw -ErrorAction SilentlyContinue
-        Remove-Item -Path $tempLogFile -Force -ErrorAction SilentlyContinue
+        # Add -stats flag for progress display and capture output
+        $ffmpegOutput = & ffmpeg @ffmpegArgs 2>&1 | ForEach-Object {
+            # Show each line immediately
+            $line = $_.ToString()
+            Write-Host $line
+            $line
+        } | Out-String
 
         Write-Host ""
 
