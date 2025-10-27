@@ -82,7 +82,7 @@ function Show-ConversionUI {
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Width="600"
-    Height="820"
+    Height="900"
     WindowStartupLocation="CenterScreen"
     ResizeMode="NoResize"
     WindowStyle="None"
@@ -289,6 +289,7 @@ function Show-ConversionUI {
         <Style TargetType="ScrollBar">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Width" Value="6"/>
+            <Setter Property="Margin" Value="8,0,0,0"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ScrollBar">
@@ -833,17 +834,17 @@ public class WindowHelper {
             $audioCombo.SelectedIndex = 0
             $audioCombo.IsEnabled = $false
             $aacBitratePanel.Visibility = [System.Windows.Visibility]::Collapsed
-            $window.Height = 820  # Smaller height when AAC slider is hidden
+            $window.Height = 900  # Smaller height when AAC slider is hidden
         } else {
             # Convert container selected - enable audio combo
             $audioCombo.IsEnabled = $true
             # Show AAC bitrate slider only if re-encode is selected
             if ($audioCombo.SelectedIndex -eq 1) {
                 $aacBitratePanel.Visibility = [System.Windows.Visibility]::Visible
-                $window.Height = 970  # Expanded height when AAC slider is shown
+                $window.Height = 1010  # Expanded height when AAC slider is shown
             } else {
                 $aacBitratePanel.Visibility = [System.Windows.Visibility]::Collapsed
-                $window.Height = 820  # Smaller height when AAC slider is hidden
+                $window.Height = 900  # Smaller height when AAC slider is hidden
             }
         }
     }

@@ -250,11 +250,23 @@ foreach ($File in $VideoFiles) {
             $SourceBitrateStr = ConvertTo-BitrateString -BitsPerSecond $SourceBitrate
             $BitrateMethodDisplay = if ($Metadata.BitrateMethod -eq "calculated") { " [calculated]" } else { "" }
             Write-Host "  Bitrate adjusted: $($LimitResult.OriginalBitrate) -> $VideoBitrate (source: $SourceBitrateStr$BitrateMethodDisplay)" -ForegroundColor Yellow
-            Write-Host "  Settings: Bitrate=$VideoBitrate MaxRate=$MaxRate BufSize=$BufSize Preset=$Preset" -ForegroundColor Gray
+
+            # Display codec-specific parameters (MaxRate/BufSize only for NVENC)
+            if ($DefaultVideoCodec -like "*nvenc*") {
+                Write-Host "  Settings: Bitrate=$VideoBitrate MaxRate=$MaxRate BufSize=$BufSize Preset=$Preset" -ForegroundColor Gray
+            } else {
+                Write-Host "  Settings: Bitrate=$VideoBitrate Preset=$Preset" -ForegroundColor Gray
+            }
+
             [System.IO.File]::AppendAllText($LogFile, "Processing: $($File.Name) - $($Metadata.Resolution) @ $($Metadata.FPS)fps - Profile: $ProfileName - Input: $InputSizeMB MB`n", [System.Text.UTF8Encoding]::new($false))
             [System.IO.File]::AppendAllText($LogFile, "  Source Bitrate: $SourceBitrateStr ($($Metadata.BitrateMethod))`n", [System.Text.UTF8Encoding]::new($false))
             [System.IO.File]::AppendAllText($LogFile, "  Bitrate adjusted: $($LimitResult.OriginalBitrate) -> $VideoBitrate`n", [System.Text.UTF8Encoding]::new($false))
-            [System.IO.File]::AppendAllText($LogFile, "  Settings: Bitrate=$VideoBitrate, MaxRate=$MaxRate, BufSize=$BufSize, Preset=$Preset`n", [System.Text.UTF8Encoding]::new($false))
+
+            if ($DefaultVideoCodec -like "*nvenc*") {
+                [System.IO.File]::AppendAllText($LogFile, "  Settings: Bitrate=$VideoBitrate, MaxRate=$MaxRate, BufSize=$BufSize, Preset=$Preset`n", [System.Text.UTF8Encoding]::new($false))
+            } else {
+                [System.IO.File]::AppendAllText($LogFile, "  Settings: Bitrate=$VideoBitrate, Preset=$Preset`n", [System.Text.UTF8Encoding]::new($false))
+            }
         } else {
             # Check if source bitrate was not available
             if ($SourceBitrate -eq 0) {
@@ -264,10 +276,22 @@ foreach ($File in $VideoFiles) {
                 $BitrateMethodDisplay = if ($Metadata.BitrateMethod -eq "calculated") { " [calculated]" } else { "" }
                 Write-Host "  Source bitrate: $SourceBitrateStr$BitrateMethodDisplay - using profile bitrate" -ForegroundColor DarkGray
             }
-            Write-Host "  Settings: Bitrate=$VideoBitrate MaxRate=$MaxRate BufSize=$BufSize Preset=$Preset" -ForegroundColor Gray
+
+            # Display codec-specific parameters (MaxRate/BufSize only for NVENC)
+            if ($DefaultVideoCodec -like "*nvenc*") {
+                Write-Host "  Settings: Bitrate=$VideoBitrate MaxRate=$MaxRate BufSize=$BufSize Preset=$Preset" -ForegroundColor Gray
+            } else {
+                Write-Host "  Settings: Bitrate=$VideoBitrate Preset=$Preset" -ForegroundColor Gray
+            }
+
             [System.IO.File]::AppendAllText($LogFile, "Processing: $($File.Name) - $($Metadata.Resolution) @ $($Metadata.FPS)fps - Profile: $ProfileName - Input: $InputSizeMB MB`n", [System.Text.UTF8Encoding]::new($false))
             [System.IO.File]::AppendAllText($LogFile, "  Source Bitrate: $(if ($SourceBitrate -gt 0) { "$SourceBitrateStr ($($Metadata.BitrateMethod))" } else { "unknown" })`n", [System.Text.UTF8Encoding]::new($false))
-            [System.IO.File]::AppendAllText($LogFile, "  Settings: Bitrate=$VideoBitrate, MaxRate=$MaxRate, BufSize=$BufSize, Preset=$Preset`n", [System.Text.UTF8Encoding]::new($false))
+
+            if ($DefaultVideoCodec -like "*nvenc*") {
+                [System.IO.File]::AppendAllText($LogFile, "  Settings: Bitrate=$VideoBitrate, MaxRate=$MaxRate, BufSize=$BufSize, Preset=$Preset`n", [System.Text.UTF8Encoding]::new($false))
+            } else {
+                [System.IO.File]::AppendAllText($LogFile, "  Settings: Bitrate=$VideoBitrate, Preset=$Preset`n", [System.Text.UTF8Encoding]::new($false))
+            }
         }
     } else {
         # Fallback to default parameters if metadata detection fails
@@ -660,7 +684,7 @@ foreach ($File in $VideoFiles) {
             "-b:v", $VideoBitrate,
             "-maxrate", $MaxRate,
             "-bufsize", $BufSize,
-            "-multipass", $DefaultMultipass,
+            "-multipass", "fullres",
             "-tune:v", "hq",
             "-rc:v", "vbr",
             "-tier:v", "0"

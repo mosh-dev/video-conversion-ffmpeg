@@ -67,7 +67,6 @@ $DefaultPreset = "p7"
 
 # Fallback FFmpeg Parameters (used when video metadata detection fails)
 $DefaultVideoBitrate = "20M"
-$DefaultMultipass = "fullres"
 
 
 # ============================================================================

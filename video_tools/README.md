@@ -47,11 +47,11 @@ A powerful batch video conversion tool with GPU acceleration, featuring an inter
 3. **Configure settings** in the GUI:
    - Select codec (AV1 or HEVC)
    - Choose encoding preset (p1-p7)
-   - Choose container format
+   - Choose a container format
    - Adjust video bitrate multiplier
    - Configure audio encoding
    - Adjust AAC bitrate (if re-encoding to AAC)
-4. **Click Start** and wait for conversion to complete
+4. **Click Start** and wait for the conversion to complete
 5. **Find converted videos** in the `_output_files/` folder
 
 ## Configuration
@@ -84,17 +84,17 @@ When you run the script, a GUI window appears with the following options:
 
 **When "Preserve Original Container" is enabled:**
 
-| Input Format | HEVC Encoding | AV1 Encoding |
-|--------------|---------------|--------------|
-| MP4 | ✅ Works | ✅ Works |
-| MKV | ✅ Works | ✅ Works |
-| MOV | ✅ Works | ❌ Skipped (incompatible) |
-| TS | ✅ Works | ❌ Skipped (incompatible) |
-| M2TS | ✅ Works | ❌ Skipped (incompatible) |
-| M4V | ✅ Works | ❌ Skipped (incompatible) |
-| AVI | ✅ Works | ❌ Skipped (incompatible) |
-| WebM | ❌ Skipped (incompatible) | ✅ Works |
-| WMV | ❌ Skipped (incompatible) | ❌ Skipped (incompatible) |
+| Input Format | HEVC Encoding            | AV1 Encoding             |
+|--------------|--------------------------|--------------------------|
+| MP4          | ✅ Works                  | ✅ Works                  |
+| MKV          | ✅ Works                  | ✅ Works                  |
+| MOV          | ✅ Works                  | ❌ Skipped (incompatible) |
+| TS           | ✅ Works                  | ❌ Skipped (incompatible) |
+| M2TS         | ✅ Works                  | ❌ Skipped (incompatible) |
+| M4V          | ✅ Works                  | ❌ Skipped (incompatible) |
+| AVI          | ✅ Works                  | ❌ Skipped (incompatible) |
+| WebM         | ❌ Skipped (incompatible) | ✅ Works                  |
+| WMV          | ❌ Skipped (incompatible) | ❌ Skipped (incompatible) |
 
 **Summary:**
 - **HEVC**: Works with 7 formats (MP4, MOV, MKV, TS, M2TS, M4V, AVI)
@@ -102,9 +102,9 @@ When you run the script, a GUI window appears with the following options:
 
 **When converting to MP4 output format:**
 
-| Output Format | HEVC Encoding | AV1 Encoding |
-|---------------|---------------|--------------|
-| MP4 | ✅ **All input formats work** | ✅ **All input formats work** |
+| Output Format | HEVC Encoding                | AV1 Encoding                 |
+|---------------|------------------------------|------------------------------|
+| MP4           | ✅ **All input formats work** | ✅ **All input formats work** |
 
 **If you need MKV output**: Set `$OutputExtension = ".mkv"` in `config/config.ps1` before launching the script. MKV supports all input formats with both HEVC and AV1.
 
@@ -170,17 +170,17 @@ $BitrateMultiplier = 1             # Override in GUI
 
 The script automatically selects encoding parameters based on video resolution and framerate:
 
-| Resolution | FPS Range | Video Bitrate | Profile Name |
-|------------|-----------|---------------|--------------|
-| 8K (7680+) | 50-999 | 80M | 8K 60fps+ |
-| 8K (7680+) | 0-50 | 60M | 8K 30fps |
-| 4K (3840+) | 50-999 | 40M | 4K 60fps+ |
-| 4K (3840+) | 0-50 | 30M | 4K 30fps |
-| 2.7K (2560+) | 50-999 | 30M | 2.7K 60fps+ |
-| 2.7K (2560+) | 0-50 | 25M | 2.7K 30fps |
-| 1080p (1920+) | 50-999 | 25M | 1080p 50fps+ |
-| 1080p (1920+) | 0-50 | 15M | 1080p 30fps |
-| 720p (0+) | 0-999 | 10M | 720p or lower |
+| Resolution    | FPS Range | Video Bitrate | Profile Name  |
+|---------------|-----------|---------------|---------------|
+| 8K (7680+)    | 50-999    | 80M           | 8K 60fps+     |
+| 8K (7680+)    | 0-50      | 60M           | 8K 30fps      |
+| 4K (3840+)    | 50-999    | 40M           | 4K 60fps+     |
+| 4K (3840+)    | 0-50      | 30M           | 4K 30fps      |
+| 2.7K (2560+)  | 50-999    | 30M           | 2.7K 60fps+   |
+| 2.7K (2560+)  | 0-50      | 25M           | 2.7K 30fps    |
+| 1080p (1920+) | 50-999    | 25M           | 1080p 50fps+  |
+| 1080p (1920+) | 0-50      | 15M           | 1080p 30fps   |
+| 720p (0+)     | 0-999     | 10M           | 720p or lower |
 
 **Note**:
 - All bitrates are adjusted by the **Video Bitrate Multiplier** you set in the GUI

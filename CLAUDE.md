@@ -28,8 +28,8 @@ This modular separation allows users to modify settings in `config.ps1` without 
 1. **Quality Preview with VMAF** (NEW): Before each full conversion, optionally run a 10-second test encode:
    - Extracts a 10-second clip from the video (configurable start position: "middle" or specific second)
    - Encodes the clip with the same settings as the full conversion
-   - Runs VMAF analysis to predict quality (0-100 scale)
-   - Displays color-coded score: Excellent (95+), Very Good (90-95), Acceptable (80-90), Poor (<80)
+   - Runs VMAF analysis to predict quality (0–100 scale)
+   - Displays color-coded score: Excellent (95+), Very Good (90–95), Acceptable (80–90), Poor (<80)
    - Helps users validate encoding settings before committing to full conversion
    - Configurable in `config/config.ps1`: `$EnableQualityPreview`, `$PreviewDuration`, `$PreviewStartPosition`, `$VMAF_Subsample`
    - Requires ffmpeg with libvmaf support
