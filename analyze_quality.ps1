@@ -178,17 +178,22 @@ function Compare-VideoQuality {
             "-"
         )
 
-        # Run ffmpeg - output will show naturally in console
+        # Run ffmpeg - show only progress lines
         Write-Host ""
 
-        # Add -stats flag for progress display and capture output
+        # Capture and filter output to show only progress
         $ffmpegOutput = & ffmpeg @ffmpegArgs 2>&1 | ForEach-Object {
-            # Show each line immediately
             $line = $_.ToString()
-            Write-Host $line
+
+            # Only show progress lines (frame=... fps=... etc.)
+            if ($line -match "^frame=") {
+                Write-Host "`r  $line" -NoNewline -ForegroundColor Cyan
+            }
+
             $line
         } | Out-String
 
+        Write-Host ""
         Write-Host ""
 
         # Parse metrics from ffmpeg output
