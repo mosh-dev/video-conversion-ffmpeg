@@ -550,10 +550,10 @@ if ($reportData.Count -gt 0) {
     $avgCompression = [math]::Round(($reportData | Measure-Object -Property CompressionRatio -Average).Average, 2)
     $avgSpaceSaved = [math]::Round(($reportData | Measure-Object -Property SpaceSavedPercent -Average).Average, 1)
 
-    $excellentCount = ($reportData | Where-Object { $_.QualityAssessment -eq "Excellent" }).Count
-    $veryGoodCount = ($reportData | Where-Object { $_.QualityAssessment -eq "Very Good" }).Count
-    $acceptableCount = ($reportData | Where-Object { $_.QualityAssessment -eq "Acceptable" }).Count
-    $poorCount = ($reportData | Where-Object { $_.QualityAssessment -eq "Poor" }).Count
+    $excellentCount = @($reportData | Where-Object { $_.QualityAssessment -eq "Excellent" }).Count
+    $veryGoodCount = @($reportData | Where-Object { $_.QualityAssessment -eq "Very Good" }).Count
+    $acceptableCount = @($reportData | Where-Object { $_.QualityAssessment -eq "Acceptable" }).Count
+    $poorCount = @($reportData | Where-Object { $_.QualityAssessment -eq "Poor" }).Count
 
     Write-Host "Files Compared:       $($reportData.Count)" -ForegroundColor White
     Write-Host "Total Analysis Time:  $totalAnalysisTime seconds" -ForegroundColor White

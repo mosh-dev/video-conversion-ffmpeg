@@ -116,10 +116,10 @@ function Show-FormattedReport {
     $avgSpaceSaved = [math]::Round(($reportData | ForEach-Object { [double]$_.SpaceSavedPercent } | Measure-Object -Average).Average, 1)
     $totalAnalysisTime = [math]::Round(($reportData | ForEach-Object { [double]$_.AnalysisTimeSeconds } | Measure-Object -Sum).Sum, 1)
 
-    $excellentCount = ($reportData | Where-Object { $_.QualityAssessment -eq "Excellent" }).Count
-    $veryGoodCount = ($reportData | Where-Object { $_.QualityAssessment -eq "Very Good" }).Count
-    $acceptableCount = ($reportData | Where-Object { $_.QualityAssessment -eq "Acceptable" }).Count
-    $poorCount = ($reportData | Where-Object { $_.QualityAssessment -eq "Poor" }).Count
+    $excellentCount = @($reportData | Where-Object { $_.QualityAssessment -eq "Excellent" }).Count
+    $veryGoodCount = @($reportData | Where-Object { $_.QualityAssessment -eq "Very Good" }).Count
+    $acceptableCount = @($reportData | Where-Object { $_.QualityAssessment -eq "Acceptable" }).Count
+    $poorCount = @($reportData | Where-Object { $_.QualityAssessment -eq "Poor" }).Count
 
     # Calculate average for each metric if present
     $hasVMAF = $reportData | Where-Object { $null -ne $_.VMAF } | Select-Object -First 1
@@ -174,18 +174,11 @@ function Show-FormattedReport {
         Write-Host "Quality Distribution:" -ForegroundColor White
     }
 
-    if ($excellentCount -gt 0) {
-        Write-Host "  Excellent:   $excellentCount" -ForegroundColor Green
-    }
-    if ($veryGoodCount -gt 0) {
-        Write-Host "  Very Good:   $veryGoodCount" -ForegroundColor Cyan
-    }
-    if ($acceptableCount -gt 0) {
-        Write-Host "  Acceptable:  $acceptableCount" -ForegroundColor Yellow
-    }
-    if ($poorCount -gt 0) {
-        Write-Host "  Poor:        $poorCount" -ForegroundColor Red
-    }
+    # Always show all categories for complete distribution view
+    Write-Host "  Excellent:   $excellentCount" -ForegroundColor Green
+    Write-Host "  Very Good:   $veryGoodCount" -ForegroundColor Cyan
+    Write-Host "  Acceptable:  $acceptableCount" -ForegroundColor Yellow
+    Write-Host "  Poor:        $poorCount" -ForegroundColor Red
     Write-Host ""
 }
 
