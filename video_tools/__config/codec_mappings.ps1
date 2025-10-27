@@ -361,8 +361,6 @@ function Test-CodecMappingsValid {
 
     $errorsFound = $false
 
-    Write-Host "Validating codec mappings..." -ForegroundColor Yellow
-
     foreach ($container in $ContainerCodecSupport.Keys) {
         $info = $ContainerCodecSupport[$container]
 
@@ -400,16 +398,12 @@ function Test-CodecMappingsValid {
         }
     }
 
-    if (-not $errorsFound) {
-        Write-Host "  All codec mappings are valid!" -ForegroundColor Green
-    }
-
     return -not $errorsFound
 }
 
 # ============================================================================
 # NOTE: Functions and variables are automatically available when dot-sourced
 # ============================================================================
-# When this file is loaded via ". .\lib\codec_mappings.ps1", all functions
+# When this file is loaded via ". .\__config\codec_mappings.ps1", all functions
 # and variables are automatically available in the calling script's scope.
 # No explicit export is needed for .ps1 files (Export-ModuleMember is only for .psm1 modules).

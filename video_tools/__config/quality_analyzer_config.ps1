@@ -45,7 +45,7 @@ $PSNR_Acceptable = 35
 
 $InputDir = ".\_input_files"      # Source videos directory
 $OutputDir = ".\_output_files"    # Re-encoded videos directory
-$ReportDir = ".\reports"          # Quality reports directory
+$ReportDir = ".\__reports"        # Quality reports directory
 
 # ============================================================================
 # SUPPORTED VIDEO EXTENSIONS

@@ -7,14 +7,14 @@
 # Edit config.ps1 to customize all parameters
 
 # Load configuration
-. .\config\config.ps1
+. .\__config\config.ps1
 
 # Load codec mappings
-. .\config\codec_mappings.ps1
+. .\__config\codec_mappings.ps1
 
 # Load helper functions
-. .\lib\helpers.ps1
-. .\lib\quality_preview_helper.ps1
+. .\__lib\helpers.ps1
+. .\__lib\quality_preview_helper.ps1
 
 # ============================================================================
 # SCRIPT LOGIC (DO NOT MODIFY BELOW UNLESS YOU KNOW WHAT YOU'RE DOING)
@@ -29,7 +29,7 @@ $StartTime = Get-Date
 # ============================================================================
 
 # Load modern Windows 11 UI
-. .\lib\show_conversion_ui.ps1
+. .\__lib\show_conversion_ui.ps1
 
 # Show UI and get user selections
 $uiResult = Show-ConversionUI -OutputCodec $OutputCodec `
@@ -76,7 +76,7 @@ Write-Host ""
 $Timestamp = $StartTime.ToString("yyyy-MM-dd_HH-mm-ss")
 $LogFile = Join-Path $LogDir "conversion_$Timestamp.txt"
 
-# Create output and log directories if they don't exist
+# Create output, log, and temp directories if they don't exist
 if (-not (Test-Path $OutputDir)) {
     New-Item -ItemType Directory -Path $OutputDir | Out-Null
 }
@@ -85,6 +85,16 @@ if (-not (Test-Path $LogDir)) {
     New-Item -ItemType Directory -Path $LogDir | Out-Null
 }
 
+if (-not (Test-Path $TempDir)) {
+    New-Item -ItemType Directory -Path $TempDir | Out-Null
+}
+
+# Resolve directories to absolute paths (critical for working directory changes during encoding)
+$InputDir = Resolve-Path $InputDir | Select-Object -ExpandProperty Path
+$OutputDir = Resolve-Path $OutputDir | Select-Object -ExpandProperty Path
+$LogDir = Resolve-Path $LogDir | Select-Object -ExpandProperty Path
+$TempDir = Resolve-Path $TempDir | Select-Object -ExpandProperty Path
+
 # Clean up any incomplete conversions from previous runs
 $TmpFiles = Get-ChildItem -Path $OutputDir -Filter "*.tmp" -File -ErrorAction SilentlyContinue
 if ($TmpFiles.Count -gt 0) {
@@ -92,6 +102,42 @@ if ($TmpFiles.Count -gt 0) {
     foreach ($TmpFile in $TmpFiles) {
         Remove-Item -Path $TmpFile.FullName -Force -ErrorAction SilentlyContinue
         Write-Host "  Removed: $($TmpFile.Name)" -ForegroundColor DarkGray
+    }
+    Write-Host ""
+}
+
+# Clean up any leftover 2-pass encoding log files from previous runs
+$PassLogFiles = Get-ChildItem -Path $TempDir -Filter "ffmpeg2pass*" -File -ErrorAction SilentlyContinue
+if ($PassLogFiles.Count -gt 0) {
+    Write-Host "Cleaning up $($PassLogFiles.Count) leftover 2-pass log file(s) from previous run..." -ForegroundColor Yellow
+    foreach ($PassLogFile in $PassLogFiles) {
+        Remove-Item -Path $PassLogFile.FullName -Force -ErrorAction SilentlyContinue
+        Write-Host "  Removed: $($PassLogFile.Name)" -ForegroundColor DarkGray
+    }
+    Write-Host ""
+}
+
+# Clean up any malformed pass log files and x265 temp files from previous runs
+$CleanupPatterns = @(
+    "*ffmpeg2pass*",          # SVT-AV1 and malformed pass files
+    "ffmpeg2pass-*.log*",     # ffmpeg default pass files
+    "*.temp",                 # x265 temp files
+    "*.cutree",               # x265 cutree files
+    "*.cutree.temp",          # x265 cutree temp files
+    "*.log.temp",             # x265 log temp files
+    "*.log.mbtree"            # x265 mbtree files
+)
+
+$CleanupFiles = @()
+foreach ($pattern in $CleanupPatterns) {
+    $CleanupFiles += Get-ChildItem -Path "." -Filter $pattern -File -ErrorAction SilentlyContinue
+}
+
+if ($CleanupFiles.Count -gt 0) {
+    Write-Host "Cleaning up $($CleanupFiles.Count) temporary encoding file(s) from previous run..." -ForegroundColor Yellow
+    foreach ($CleanupFile in $CleanupFiles) {
+        Remove-Item -Path $CleanupFile.FullName -Force -ErrorAction SilentlyContinue
+        Write-Host "  Removed: $($CleanupFile.Name)" -ForegroundColor DarkGray
     }
     Write-Host ""
 }
@@ -568,12 +614,12 @@ foreach ($File in $VideoFiles) {
     # Map universal preset names to encoder-specific presets
     # Universal: Fastest, Fast, Medium, Slow, Slowest
     # NVENC: p1 (fastest) to p7 (slowest)
-    # SVT-AV1: 13 (fastest) to 7 (slowest) (we use range 7-13, not full 0-13)
+    # SVT-AV1: 10 (fastest) to 3 (slowest) - optimized range [3,4,6,8,10]
     # x265: veryfast to veryslow
     $EncoderPreset = switch ($Preset) {
         "Fastest" {
             if ($IsSoftwareEncoder) {
-                if ($OutputCodec -eq "AV1_SVT") { "13" }      # SVT-AV1: Fastest
+                if ($OutputCodec -eq "AV1_SVT") { "10" }       # SVT-AV1: Fastest
                 else { "veryfast" }                            # x265: Fastest
             } else {
                 "p1"                                           # NVENC: Fastest
@@ -581,7 +627,7 @@ foreach ($File in $VideoFiles) {
         }
         "Fast" {
             if ($IsSoftwareEncoder) {
-                if ($OutputCodec -eq "AV1_SVT") { "11" }      # SVT-AV1: Fast
+                if ($OutputCodec -eq "AV1_SVT") { "8" }        # SVT-AV1: Fast
                 else { "fast" }                                # x265: Fast
             } else {
                 "p3"                                           # NVENC: Fast
@@ -589,7 +635,7 @@ foreach ($File in $VideoFiles) {
         }
         "Medium" {
             if ($IsSoftwareEncoder) {
-                if ($OutputCodec -eq "AV1_SVT") { "9" }       # SVT-AV1: Medium
+                if ($OutputCodec -eq "AV1_SVT") { "6" }        # SVT-AV1: Medium
                 else { "medium" }                              # x265: Medium
             } else {
                 "p5"                                           # NVENC: Medium
@@ -597,7 +643,7 @@ foreach ($File in $VideoFiles) {
         }
         "Slow" {
             if ($IsSoftwareEncoder) {
-                if ($OutputCodec -eq "AV1_SVT") { "8" }       # SVT-AV1: Slow
+                if ($OutputCodec -eq "AV1_SVT") { "4" }        # SVT-AV1: Slow
                 else { "slower" }                              # x265: Slow
             } else {
                 "p6"                                           # NVENC: Slow
@@ -605,7 +651,7 @@ foreach ($File in $VideoFiles) {
         }
         "Slowest" {
             if ($IsSoftwareEncoder) {
-                if ($OutputCodec -eq "AV1_SVT") { "7" }       # SVT-AV1: Slowest
+                if ($OutputCodec -eq "AV1_SVT") { "3" }        # SVT-AV1: Slowest
                 else { "veryslow" }                            # x265: Slowest
             } else {
                 "p7"                                           # NVENC: Slowest
@@ -617,8 +663,9 @@ foreach ($File in $VideoFiles) {
                 $PresetNum = [int]$matches[1]
                 if ($IsSoftwareEncoder) {
                     if ($OutputCodec -eq "AV1_SVT") {
-                        $SVTNum = 14 - $PresetNum
-                        "$SVTNum"
+                        # Map p1-p7 to SVT-AV1 presets 10,8,6,4,3
+                        $SVTMap = @{ 1=10; 2=10; 3=8; 4=6; 5=6; 6=4; 7=3 }
+                        "$($SVTMap[$PresetNum])"
                     } else {
                         $x265Map = @{ 1="veryfast"; 2="faster"; 3="fast"; 4="medium"; 5="slow"; 6="slower"; 7="veryslow" }
                         $x265Map[$PresetNum]
@@ -629,7 +676,7 @@ foreach ($File in $VideoFiles) {
             } else {
                 # Unknown preset, use slowest for safety
                 if ($IsSoftwareEncoder) {
-                    if ($OutputCodec -eq "AV1_SVT") { "7" }
+                    if ($OutputCodec -eq "AV1_SVT") { "3" }
                     else { "veryslow" }
                 } else {
                     "p7"
@@ -646,6 +693,7 @@ foreach ($File in $VideoFiles) {
 
         if ($OutputCodec -eq "AV1_SVT") {
             # SVT-AV1 uses numeric presets: 0 (slowest/best) to 13 (fastest/lowest quality)
+            # We use optimized range: 3 (slowest), 4, 6, 8, 10 (fastest)
             # Note: SVT-AV1 does NOT support -maxrate/-bufsize in VBR mode (only in CRF mode)
             Write-Host "  SVT-AV1 Preset: $EncoderPreset (2-pass encoding, mapped from $Preset)" -ForegroundColor DarkGray
             [System.IO.File]::AppendAllText($LogFile, "  SVT-AV1 Preset: $EncoderPreset (2-pass encoding, mapped from $Preset)`n", [System.Text.UTF8Encoding]::new($false))
@@ -656,7 +704,7 @@ foreach ($File in $VideoFiles) {
                 "-b:v", $VideoBitrate,
                 # Note: maxrate/bufsize NOT supported in VBR mode for SVT-AV1
                 "-g", "240",           # Keyframe interval
-                "-svtav1-params", "tune=0:enable-qm=1:qm-min=0"  # Tune for quality
+                "-svtav1-params", "tune=1:enable-restoration=1:enable-cdef=1:enable-qm=1"  # Optimized quality flags
             )
             # Note: Pixel format is set by the format filter, not here
         } elseif ($OutputCodec -eq "HEVC_SVT") {
@@ -698,7 +746,13 @@ foreach ($File in $VideoFiles) {
     try {
         if ($IsSoftwareEncoder) {
             # 2-PASS ENCODING FOR SVT
-            $PassLogFile = Join-Path $OutputDir "ffmpeg2pass_$($BaseFileName)"
+            # Save current working directory and switch to temp dir for x265 compatibility
+            $OriginalWorkingDir = Get-Location
+            Set-Location -Path $TempDir
+
+            # Use relative filename (basename only) since we're in the temp directory
+            $PassLogFileBasename = "ffmpeg2pass_$($BaseFileName)"
+            $PassLogFile = Join-Path $TempDir $PassLogFileBasename
 
             # Build base input args (no stream mappings)
             # Start fresh without the stream mappings from $FFmpegArgs
@@ -748,9 +802,9 @@ foreach ($File in $VideoFiles) {
             if ($OutputCodec -eq "AV1_SVT") {
                 $Pass1Args += @("-pass", "1", "-passlogfile", $PassLogFile)
             } elseif ($OutputCodec -eq "HEVC_SVT") {
-                # x265 pass 1
+                # x265 pass 1 - use basename only since we're in temp directory
                 $Pass1Args += @(
-                    "-x265-params", "pass=1:stats=$PassLogFile.log:log-level=error",
+                    "-x265-params", "pass=1:stats=$PassLogFileBasename.log:log-level=error:tune=vmaf:psy-rd=2.0:aq-mode=3",
                     "-pass", "1"
                 )
             }
@@ -797,9 +851,9 @@ foreach ($File in $VideoFiles) {
             if ($OutputCodec -eq "AV1_SVT") {
                 $Pass2Args += @("-pass", "2", "-passlogfile", $PassLogFile)
             } elseif ($OutputCodec -eq "HEVC_SVT") {
-                # x265 pass 2
+                # x265 pass 2 - use basename only since we're in temp directory
                 $Pass2Args += @(
-                    "-x265-params", "pass=2:stats=$PassLogFile.log:log-level=error",
+                    "-x265-params", "pass=2:stats=$PassLogFileBasename.log:log-level=error:tune=vmaf:psy-rd=2.0:aq-mode=3",
                     "-pass", "2"
                 )
             }
@@ -837,8 +891,18 @@ foreach ($File in $VideoFiles) {
             & ffmpeg @Pass2Args
             $ExitCode = $LASTEXITCODE
 
-            # Clean up pass log files
-            Remove-Item "$PassLogFile*" -Force -ErrorAction SilentlyContinue
+            # Clean up all pass log files from temp directory
+            Get-ChildItem -Path $TempDir -Filter "ffmpeg2pass_$($BaseFileName)*" -File -ErrorAction SilentlyContinue |
+                Remove-Item -Force -ErrorAction SilentlyContinue
+
+            # Clean up x265-specific temp files from current directory (x265 creates these in pwd)
+            if ($OutputCodec -eq "HEVC_SVT") {
+                $x265CleanupPatterns = @("*.temp", "*.cutree", "*.cutree.temp", "*.log.temp", "*.log.mbtree", "ffmpeg2pass-*.log")
+                foreach ($pattern in $x265CleanupPatterns) {
+                    Get-ChildItem -Path "." -Filter $pattern -File -ErrorAction SilentlyContinue |
+                        Remove-Item -Force -ErrorAction SilentlyContinue
+                }
+            }
 
             if ($ExitCode -eq 0) {
                 Write-Host "  Pass 2/2: Complete" -ForegroundColor Green
@@ -883,6 +947,11 @@ foreach ($File in $VideoFiles) {
             # Execute ffmpeg
             & ffmpeg @FFmpegArgs
             $ExitCode = $LASTEXITCODE
+
+            # Restore original working directory (for NVENC which doesn't change it)
+            if ($IsSoftwareEncoder) {
+                Set-Location -Path $OriginalWorkingDir
+            }
         }
 
         if ($ExitCode -eq 0) {
@@ -927,6 +996,21 @@ foreach ($File in $VideoFiles) {
                 Remove-Item -LiteralPath $TempOutputPath -Force -ErrorAction SilentlyContinue
             }
 
+            # Clean up pass log files on failure (for 2-pass encoding)
+            if ($IsSoftwareEncoder) {
+                Get-ChildItem -Path $TempDir -Filter "ffmpeg2pass_$($BaseFileName)*" -File -ErrorAction SilentlyContinue |
+                    Remove-Item -Force -ErrorAction SilentlyContinue
+
+                # Clean up x265-specific temp files from current directory
+                if ($OutputCodec -eq "HEVC_SVT") {
+                    $x265CleanupPatterns = @("*.temp", "*.cutree", "*.cutree.temp", "*.log.temp", "*.log.mbtree", "ffmpeg2pass-*.log")
+                    foreach ($pattern in $x265CleanupPatterns) {
+                        Get-ChildItem -Path "." -Filter $pattern -File -ErrorAction SilentlyContinue |
+                            Remove-Item -Force -ErrorAction SilentlyContinue
+                    }
+                }
+            }
+
             $ErrorCount++
         }
     } catch {
@@ -936,6 +1020,21 @@ foreach ($File in $VideoFiles) {
         # Clean up temp file on exception
         if (Test-Path -LiteralPath $TempOutputPath) {
             Remove-Item -LiteralPath $TempOutputPath -Force -ErrorAction SilentlyContinue
+        }
+
+        # Clean up pass log files on exception (for 2-pass encoding)
+        if ($IsSoftwareEncoder) {
+            Get-ChildItem -Path $TempDir -Filter "ffmpeg2pass_$($BaseFileName)*" -File -ErrorAction SilentlyContinue |
+                Remove-Item -Force -ErrorAction SilentlyContinue
+
+            # Clean up x265-specific temp files from current directory
+            if ($OutputCodec -eq "HEVC_SVT") {
+                $x265CleanupPatterns = @("*.temp", "*.cutree", "*.cutree.temp", "*.log.temp", "*.log.mbtree", "ffmpeg2pass-*.log")
+                foreach ($pattern in $x265CleanupPatterns) {
+                    Get-ChildItem -Path "." -Filter $pattern -File -ErrorAction SilentlyContinue |
+                        Remove-Item -Force -ErrorAction SilentlyContinue
+                }
+            }
         }
 
         $ErrorCount++

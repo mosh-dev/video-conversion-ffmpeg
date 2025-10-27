@@ -11,7 +11,8 @@
 # Input/Output Directories
 $InputDir = ".\_input_files"
 $OutputDir = ".\_output_files"
-$LogDir = ".\logs"
+$LogDir = ".\__logs"
+$TempDir = ".\__temp"  # Temporary directory for 2-pass encoding log files
 
 # Log file will be auto-generated with timestamp (e.g., conversion_2025-01-15_14-30-45.txt)
 # This is set in convert_videos.ps1 and cannot be configured here

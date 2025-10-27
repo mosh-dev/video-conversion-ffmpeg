@@ -1,8 +1,8 @@
 # Test script for comprehensive video metadata detection
 # This script tests all metadata fields used by the conversion script
 
-# Load helper functions from lib/helpers.ps1
-. .\lib\helpers.ps1
+# Load helper functions from __lib/helpers.ps1
+. .\__lib\helpers.ps1
 
 # Test all video files in _input_files directory
 $InputDir = ".\_input_files"

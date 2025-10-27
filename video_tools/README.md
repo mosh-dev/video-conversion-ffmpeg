@@ -1,5 +1,7 @@
 # Video Conversion Tool
 
+> **Part of [FFmpeg PowerShell Tools](../README.md)** - A suite of media processing tools
+
 A powerful batch video conversion tool with GPU acceleration, featuring an interactive GUI and intelligent parameter selection based on video properties.
 
 ## Features
@@ -78,7 +80,7 @@ When you run the script, a GUI window appears with the following options:
   - Note: Audio encoding is automatically set to "Copy" when preserving container
   - Incompatible codec/container combinations are automatically skipped (e.g., AV1 in MOV, HEVC in WebM)
 
-**Note**: To output MKV files, set `$OutputExtension = ".mkv"` in `config/config.ps1` before launching the GUI
+**Note**: To output MKV files, set `$OutputExtension = ".mkv"` in `__config/config.ps1` before launching the GUI
 
 ##### Container/Codec Compatibility Matrix
 
@@ -106,7 +108,7 @@ When you run the script, a GUI window appears with the following options:
 |---------------|------------------------------|------------------------------|
 | MP4           | ✅ **All input formats work** | ✅ **All input formats work** |
 
-**If you need MKV output**: Set `$OutputExtension = ".mkv"` in `config/config.ps1` before launching the script. MKV supports all input formats with both HEVC and AV1.
+**If you need MKV output**: Set `$OutputExtension = ".mkv"` in `__config/config.ps1` before launching the script. MKV supports all input formats with both HEVC and AV1.
 
 **Recommendation:**
 - Use **"Preserve original container"** with **HEVC** for maximum format compatibility (7 formats work)
@@ -132,9 +134,9 @@ When you run the script, a GUI window appears with the following options:
     - Automatically uses 48 kHz for sources higher than 48 kHz or unsupported rates
     - Ensures optimal compatibility without quality loss
 
-### Advanced Configuration (config/config.ps1)
+### Advanced Configuration (__config/config.ps1)
 
-Edit `config/config.ps1` to customize:
+Edit `__config/config.ps1` to customize:
 
 ```powershell
 # Processing Options
@@ -190,16 +192,17 @@ The script automatically selects encoding parameters based on video resolution a
 ## Directory Structure
 
 ```
-VideoConversion/
+video_tools/
 ├── _input_files/         # Place source videos here
 ├── _output_files/        # Converted videos appear here
-├── logs/                 # Timestamped conversion logs
-├── reports/              # Quality validation reports (JSON)
-├── config/
+├── __logs/               # Timestamped conversion logs
+├── __reports/            # Quality validation reports (JSON)
+├── __temp/               # Temporary 2-pass encoding files
+├── __config/
 │   ├── config.ps1                      # Configuration file
 │   ├── codec_mappings.ps1              # Codec/container compatibility
 │   └── quality_analyzer_config.ps1     # Quality analyzer settings
-├── lib/
+├── __lib/
 │   ├── helpers.ps1                     # Helper functions
 │   ├── quality_preview_helper.ps1      # Quality preview functions
 │   ├── show_conversion_ui.ps1          # Main conversion GUI
@@ -239,7 +242,7 @@ After converting videos, verify the quality:
 1. Run `.\analyze_quality.ps1`
 2. Script automatically matches source and encoded files
 3. VMAF/SSIM/PSNR metrics are calculated for each pair
-4. View results in console and JSON report in `reports/`
+4. View results in console and JSON report in `__reports/`
 
 ### Example 5: View Quality Reports
 Browse and view saved quality reports:
@@ -299,7 +302,7 @@ Press any key to exit...
 
 ## Logs
 
-Each conversion run creates a timestamped log file in `logs/`:
+Each conversion run creates a timestamped log file in `__logs/`:
 
 - Filename format: `conversion_YYYY-MM-DD_HH-MM-SS.txt`
 - Contains:
@@ -325,7 +328,7 @@ The script will:
 3. Match source videos with their re-encoded versions (handles container changes)
 4. Calculate selected quality metrics using ffmpeg
 5. Generate console output with color-coded results
-6. Save detailed JSON report to `reports/quality_comparison_YYYY-MM-DD_HH-MM-SS.json`
+6. Save detailed JSON report to `__reports/quality_comparison_YYYY-MM-DD_HH-MM-SS.json`
 
 ### Quality Metrics Explained
 

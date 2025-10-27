@@ -7,13 +7,13 @@
 # Requires: ffmpeg
 
 # Import configuration
-. ".\config\quality_analyzer_config.ps1"
+. ".\__config\quality_analyzer_config.ps1"
 
 # Load helper functions
-. ".\lib\helpers.ps1"
+. ".\__lib\helpers.ps1"
 
 # Load UI module
-. ".\lib\show_quality_analyzer_ui.ps1"
+. ".\__lib\show_quality_analyzer_ui.ps1"
 
 # ============================================================================
 # SHOW UI AND GET USER SELECTIONS

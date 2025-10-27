@@ -3,7 +3,7 @@
 # ============================================================================
 # Browse and view quality comparison CSV reports in formatted table view
 
-$ReportDir = ".\reports"
+$ReportDir = ".\__reports"
 
 # Colors for quality assessment
 $QualityColors = @{

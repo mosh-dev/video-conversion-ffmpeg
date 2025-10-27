@@ -3,10 +3,12 @@
 !**/_input_files/.gitkeep
 **/_output_files/*
 !**/_output_files/.gitkeep
-**/logs/*
-!**/logs/.gitkeep
-**/reports/*
-!**/reports/.gitkeep
+**/__logs/*
+!**/__logs/.gitkeep
+**/__reports/*
+!**/__reports/.gitkeep
+**/__temp/*
+!**/__temp/.gitkeep
 
 # IDE configuration
 .idea/
@@ -14,3 +16,7 @@
 # Temporary files
 *.tmp
 *.temp
+
+# ffmpeg 2-pass encoding log files
+ffmpeg2pass*.log*
+*-0.log
