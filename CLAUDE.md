@@ -13,15 +13,15 @@ The codebase is organized into modular components:
 - **`convert_videos.ps1`** - Main conversion script with integrated 10-second VMAF quality preview
 - **`analyze_quality.ps1`** - Quality validation tool using VMAF/SSIM/PSNR metrics (user-selectable via GUI)
 - **`view_reports.ps1`** - Interactive report viewer for browsing and displaying JSON quality reports
-- **`config/config.ps1`** - Centralized configuration file with all user-modifiable parameters
-- **`config/codec_mappings.ps1`** - Container/codec compatibility mappings and validation functions
-- **`config/quality_analyzer_config.ps1`** - Quality analyzer configuration settings
-- **`lib/helpers.ps1`** - Helper functions for metadata detection, parameter selection, and bitrate calculation
-- **`lib/quality_preview_helper.ps1`** - 10-second VMAF test conversion functions
-- **`lib/show_conversion_ui.ps1`** - Modern Windows 11-style GUI for interactive parameter selection
-- **`lib/show_quality_analyzer_ui.ps1`** - GUI for quality analyzer metric selection
+- **`__config/config.ps1`** - Centralized configuration file with all user-modifiable parameters
+- **`__config/codec_mappings.ps1`** - Container/codec compatibility mappings and validation functions
+- **`__config/quality_analyzer_config.ps1`** - Quality analyzer configuration settings
+- **`__lib/helpers.ps1`** - Helper functions for metadata detection, parameter selection, and bitrate calculation
+- **`__lib/quality_preview_helper.ps1`** - 10-second VMAF test conversion functions
+- **`__lib/show_conversion_ui.ps1`** - Modern Windows 11-style GUI for interactive parameter selection
+- **`__lib/show_quality_analyzer_ui.ps1`** - GUI for quality analyzer metric selection
 
-This modular separation allows users to modify settings in `config.ps1` without touching the core logic, and makes the codebase maintainable with clear separation of concerns.
+This modular separation allows users to modify settings in `__config/config.ps1` without touching the core logic, and makes the codebase maintainable with clear separation of concerns.
 
 ### Key Design Patterns
 
@@ -31,12 +31,12 @@ This modular separation allows users to modify settings in `config.ps1` without 
    - Runs VMAF analysis to predict quality (0–100 scale)
    - Displays color-coded score: Excellent (95+), Very Good (90–95), Acceptable (80–90), Poor (<80)
    - Helps users validate encoding settings before committing to full conversion
-   - Configurable in `config/config.ps1`: `$EnableQualityPreview`, `$PreviewDuration`, `$PreviewStartPosition`, `$VMAF_Subsample`
+   - Configurable in `__config/config.ps1`: `$EnableQualityPreview`, `$PreviewDuration`, `$PreviewStartPosition`, `$VMAF_Subsample`
    - Requires ffmpeg with libvmaf support
-   - Implemented in `lib/quality_preview_helper.ps1` with function `Test-ConversionQuality`
+   - Implemented in `__lib/quality_preview_helper.ps1` with function `Test-ConversionQuality`
 
 2. **Codec/Container Compatibility Mapping**: Centralized configuration for all codec/container rules:
-   - All compatibility rules defined in `config/codec_mappings.ps1`
+   - All compatibility rules defined in `__config/codec_mappings.ps1`
    - Simple approach: Only define `SupportedVideoCodecs` and `SupportedAudioCodecs` - anything else is incompatible
    - Helper functions: `Test-CodecContainerCompatibility`, `Test-AudioContainerCompatibility`, `Get-SkipReason`
    - Automatic validation on startup to catch configuration errors
@@ -112,7 +112,7 @@ The script launches an interactive GUI where users can configure:
   - Incompatible audio codecs are auto-detected and re-encoded regardless of selection
 - Bitrate multiplier (0.1x to 3.0x via slider)
 
-Default values are loaded from `config.ps1` and can be adjusted before starting conversion.
+Default values are loaded from `__config/config.ps1` and can be adjusted before starting conversion.
 
 **GUI Features**:
 - Modern Windows 11 styling with dark/light mode support
@@ -138,7 +138,7 @@ The quality validation script validates re-encoded video quality using industry-
 - Automatic file matching between `input_files/` and `output_files/` directories
 - Handles container format changes and collision-renamed files
 - Color-coded console output based on quality thresholds
-- JSON report generation in `reports/` directory
+- JSON report generation in `__reports/` directory
 - Comprehensive statistics: compression ratio, bitrate comparison, quality distribution
 - Interactive GUI for selecting which metrics to enable
 
@@ -182,7 +182,7 @@ PSNR (dB scale):
 Interactive JSON report viewer for browsing and displaying quality validation results:
 
 **Features:**
-- Lists all JSON reports from `reports/` directory sorted by date (newest first)
+- Lists all JSON reports from `__reports/` directory sorted by date (newest first)
 - Displays formatted quality metrics with color-coded assessment
 - Shows summary statistics and quality distribution
 - Export formatted report to plain text file
@@ -194,9 +194,9 @@ Interactive JSON report viewer for browsing and displaying quality validation re
 - Share formatted reports without external tools
 - Archive quality metrics in human-readable format
 
-## Configuration (config/config.ps1)
+## Configuration (__config/config.ps1)
 
-All parameters are configured in `config/config.ps1`:
+All parameters are configured in `__config/config.ps1`:
 
 **Essential Settings:**
 - `$OutputCodec` - Choose "AV1" or "HEVC" codec (can be overridden in GUI)
@@ -215,7 +215,7 @@ All parameters are configured in `config/config.ps1`:
 
 **Parameter Profiles:**
 
-The `$ParameterMap` array in `config/config.ps1` defines encoding parameters for different resolution/FPS combinations:
+The `$ParameterMap` array in `__config/config.ps1` defines encoding parameters for different resolution/FPS combinations:
 - 8K, 4K, 2.7K/1440p, 1080p (with multiple FPS tiers), and 720p profiles
 - Each profile specifies: VideoBitrate, MaxRate, BufSize, and Preset
 - Use `$BitrateModifier` to globally adjust all bitrates (e.g., 1.1 = 10% increase)
@@ -248,7 +248,7 @@ The `$AudioCodecMap` hashtable maps user-friendly names to ffmpeg codec names:
 - Batch processing with progress tracking and colored console output
 - **Filename collision detection**: Prevents overwrites when converting container formats
 - Compression statistics (input/output size, compression ratio, space saved %)
-- Timestamped logging to `logs/conversion_YYYY-MM-DD_HH-MM-SS.txt` (unique log per run)
+- Timestamped logging to `__logs/conversion_YYYY-MM-DD_HH-MM-SS.txt` (unique log per run)
 - Skip existing files to avoid reconversion (`$SkipExistingFiles`)
 - Automatic cleanup of incomplete conversions (.tmp files) from previous runs
 - Temporary file handling with atomic rename on success
@@ -313,20 +313,29 @@ When editing `convert_videos.ps1` or helper files:
    ```
    Square brackets `[]` in filenames are treated as wildcards without `-LiteralPath`.
 
-3. **File Size Timing**: When reading output file size after conversion, add a brief delay and use `-Force`:
+3. **Directory Path Resolution**: All directories (`$InputDir`, `$OutputDir`, `$LogDir`, `$TempDir`) are resolved to absolute paths at startup:
+   ```powershell
+   $InputDir = Resolve-Path $InputDir | Select-Object -ExpandProperty Path
+   $OutputDir = Resolve-Path $OutputDir | Select-Object -ExpandProperty Path
+   $LogDir = Resolve-Path $LogDir | Select-Object -ExpandProperty Path
+   $TempDir = Resolve-Path $TempDir | Select-Object -ExpandProperty Path
+   ```
+   **Critical for SVT encoders**: SVT encoders (x265/libsvtav1) change the working directory to `__temp` during 2-pass encoding to work around x265 path parsing limitations. Absolute paths ensure output files continue being written to `_output_files` correctly even when the working directory changes.
+
+4. **File Size Timing**: When reading output file size after conversion, add a brief delay and use `-Force`:
    ```powershell
    Start-Sleep -Milliseconds 100
    $OutputFile = Get-Item -LiteralPath $OutputPath -Force
    ```
    This ensures the file system cache is flushed and accurate size is retrieved.
 
-4. **Hardware Acceleration Selection**: The script automatically selects hardware acceleration method based on file extension:
+5. **Hardware Acceleration Selection**: The script automatically selects hardware acceleration method based on file extension:
    - CUDA (NVDEC) is default and fastest for most formats
    - D3D11VA is used for problematic formats: FLV, 3GP, DIVX
    - Software decoding is never explicitly selected but serves as automatic fallback
    - Modify `$HWAccelMethod` logic in `convert_videos.ps1` to change selection criteria
 
-5. **Audio Compatibility Logic**: Enhanced codec detection for accurate compatibility checking:
+6. **Audio Compatibility Logic**: Enhanced codec detection for accurate compatibility checking:
    - Uses ffprobe to detect actual audio codec (lines 225-230)
    - Defines incompatible codec lists for MP4/MOV/M4V and MKV containers (lines 233-234)
    - WMA codecs (wmav1, wmav2, wmapro, wmalossless) are incompatible with MP4/MOV/MKV
@@ -335,8 +344,8 @@ When editing `convert_videos.ps1` or helper files:
    - Falls back to AAC for universal compatibility
    - See lines 216-265 in `convert_videos.ps1` for implementation
 
-6. **Container/Codec Validation**: Prevents ffmpeg errors from incompatible combinations:
-   - All codec/container rules defined in `config/codec_mappings.ps1`
+7. **Container/Codec Validation**: Prevents ffmpeg errors from incompatible combinations:
+   - All codec/container rules defined in `__config/codec_mappings.ps1`
    - Automatic validation on script startup using `Test-CodecMappingsValid`
    - Uses `Test-CodecContainerCompatibility` to check video codec support
    - Uses `Test-AudioContainerCompatibility` to check audio codec support
@@ -344,14 +353,14 @@ When editing `convert_videos.ps1` or helper files:
    - Logs skipped files to conversion log
    - Easy to extend: just add entries to `$ContainerCodecSupport` hashtable
 
-7. **GUI Container/Audio Interaction**: Dynamic UI state management:
+8. **GUI Container/Audio Interaction**: Dynamic UI state management:
    - When "Preserve original container" is selected, audio dropdown is forced to "Copy original audio"
    - Audio dropdown becomes disabled (IsEnabled = false) with 50% opacity styling
    - Container selection change event handler updates audio dropdown state dynamically
-   - Implemented in lines 616-634 of `lib/show_conversion_ui.ps1`
+   - Implemented in lines 616-634 of `__lib/show_conversion_ui.ps1`
    - Disabled state styling in lines 134-159 (ToggleButton opacity + ContentPresenter opacity)
 
-8. **MKV Special Handling**: MKV files use extended stream mapping:
+9. **MKV Special Handling**: MKV files use extended stream mapping:
    - `-map 0` preserves all streams (video, audio, subtitles, attachments, metadata)
    - `-fflags +genpts` generates presentation timestamps for playback compatibility
    - `-ignore_unknown` skips unsupported stream types without errors
@@ -359,7 +368,7 @@ When editing `convert_videos.ps1` or helper files:
 
 ### Testing Parameter Changes
 
-When modifying `$ParameterMap` in config.ps1:
+When modifying `$ParameterMap` in `__config/config.ps1`:
 1. Test with a single file first (move other files temporarily)
 2. Monitor GPU usage: `nvidia-smi -l 1`
 3. Check conversion_log.txt for applied parameters
@@ -367,7 +376,7 @@ When modifying `$ParameterMap` in config.ps1:
 
 ## Supported Input Formats
 
-The script handles a wide variety of video formats through the `$FileExtensions` array in `config/config.ps1`:
+The script handles a wide variety of video formats through the `$FileExtensions` array in `__config/config.ps1`:
 
 **Tested & Fully Supported:**
 - MP4, MOV, MKV, WMV, AVI - Mainstream formats with full hardware acceleration
@@ -381,8 +390,8 @@ The script handles a wide variety of video formats through the `$FileExtensions`
 - WebM, OGV, ASF - May work but require testing
 
 **Adding New Formats:**
-1. Add pattern to `$FileExtensions` array in `config/config.ps1` (e.g., `"*.mpg"`)
-2. Add format definition to `$ContainerCodecSupport` in `config/codec_mappings.ps1`:
+1. Add pattern to `$FileExtensions` array in `__config/config.ps1` (e.g., `"*.mpg"`)
+2. Add format definition to `$ContainerCodecSupport` in `__config/codec_mappings.ps1`:
    ```powershell
    ".mpg" = @{
        SupportedVideoCodecs = @("mpeg2", "mpeg1")  # Only list what IS supported
@@ -415,16 +424,17 @@ The script handles a wide variety of video formats through the `$FileExtensions`
 ## Directory Structure
 
 ```
-VideoConversion/
+video_tools/
 ├── _input_files/         # Source videos for conversion
 ├── _output_files/        # Re-encoded videos
-├── logs/                 # Conversion logs (timestamped)
-├── reports/              # Quality validation reports (JSON)
-├── config/
+├── __logs/               # Conversion logs (timestamped)
+├── __reports/            # Quality validation reports (JSON)
+├── __temp/               # 2-pass encoding temporary files
+├── __config/
 │   ├── config.ps1                      # User configuration
 │   ├── codec_mappings.ps1              # Codec/container compatibility mappings
 │   └── quality_analyzer_config.ps1     # Quality analyzer settings
-├── lib/
+├── __lib/
 │   ├── helpers.ps1                     # Helper functions (metadata, bitrate calculations)
 │   ├── quality_preview_helper.ps1      # 10-second VMAF test functions
 │   ├── show_conversion_ui.ps1          # Main conversion GUI interface
@@ -432,6 +442,5 @@ VideoConversion/
 ├── convert_videos.ps1    # Main conversion script with quality preview
 ├── analyze_quality.ps1   # Quality validation tool (VMAF/SSIM/PSNR)
 ├── view_reports.ps1      # Quality report viewer
-├── CLAUDE.md             # This file
-└── README.md             # User documentation
+└── readme.md             # Video tools documentation
 ```

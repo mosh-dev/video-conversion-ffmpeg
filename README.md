@@ -28,7 +28,7 @@ ffmpeg-ps-tools/
 │   ├── convert_videos.ps1
 │   ├── analyze_quality.ps1
 │   ├── view_reports.ps1
-│   └── README.md
+│   └── readme.md
 ├── image_tools/          # Image processing (coming soon)
 └── README.md             # This file
 ```
@@ -67,7 +67,7 @@ ffmpeg-ps-tools/
 
 Each tool has its own comprehensive documentation:
 
-- **Video Tools**: [video_tools/README.md](./video_tools/README.md)
+- **Video Tools**: [video_tools/README.md](./video_tools/readme.md)
 - **Image Tools**: Coming soon
 - **Claude Code Reference**: [CLAUDE.md](./CLAUDE.md) - Instructions for Claude Code AI assistant
 
