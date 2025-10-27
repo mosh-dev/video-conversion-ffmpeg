@@ -65,24 +65,92 @@ function Test-ConversionQuality {
         # Build encoding command for test clip
         Write-Host "  Encoding test clip..." -ForegroundColor Yellow -NoNewline
 
+        # Map codec name to ffmpeg encoder
         $codecMap = @{
-            "AV1" = "av1_nvenc"
-            "HEVC" = "hevc_nvenc"
+            "AV1_NVENC"   = "av1_nvenc"
+            "HEVC_NVENC"  = "hevc_nvenc"
+            "AV1_SVT"     = "libsvtav1"
+            "HEVC_SVT"    = "libx265"
         }
         $ffmpegCodec = $codecMap[$EncodingParams.Codec]
 
-        $testEncodeArgs = @(
-            "-hwaccel", $EncodingParams.HWAccel,
-            "-i", $tempSource,
-            "-c:v", $ffmpegCodec,
-            "-preset", $EncodingParams.Preset,
-            "-b:v", $EncodingParams.VideoBitrate,
-            "-maxrate", $EncodingParams.MaxRate,
-            "-bufsize", $EncodingParams.BufSize,
-            "-an",  # No audio (test clip has no audio)
-            "-y",
-            $tempEncoded
-        )
+        # Determine if using software encoder
+        $isSoftwareEncoder = ($EncodingParams.Codec -eq "AV1_SVT" -or $EncodingParams.Codec -eq "HEVC_SVT")
+
+        # Map universal preset to encoder-specific preset
+        $encoderPreset = switch ($EncodingParams.Preset) {
+            "Fastest" {
+                if ($EncodingParams.Codec -eq "AV1_SVT") { "13" }
+                elseif ($EncodingParams.Codec -eq "HEVC_SVT") { "veryfast" }
+                else { "p1" }
+            }
+            "Fast" {
+                if ($EncodingParams.Codec -eq "AV1_SVT") { "11" }
+                elseif ($EncodingParams.Codec -eq "HEVC_SVT") { "fast" }
+                else { "p3" }
+            }
+            "Medium" {
+                if ($EncodingParams.Codec -eq "AV1_SVT") { "9" }
+                elseif ($EncodingParams.Codec -eq "HEVC_SVT") { "medium" }
+                else { "p5" }
+            }
+            "Slow" {
+                if ($EncodingParams.Codec -eq "AV1_SVT") { "8" }
+                elseif ($EncodingParams.Codec -eq "HEVC_SVT") { "slower" }
+                else { "p6" }
+            }
+            "Slowest" {
+                if ($EncodingParams.Codec -eq "AV1_SVT") { "7" }
+                elseif ($EncodingParams.Codec -eq "HEVC_SVT") { "veryslow" }
+                else { "p7" }
+            }
+            default {
+                # Try to use as-is (for legacy p1-p7 format)
+                $EncodingParams.Preset
+            }
+        }
+
+        # Build encoding arguments (software encoders don't use hardware acceleration)
+        if ($isSoftwareEncoder) {
+            $testEncodeArgs = @(
+                "-i", $tempSource,
+                "-c:v", $ffmpegCodec,
+                "-preset", $encoderPreset,
+                "-b:v", $EncodingParams.VideoBitrate,
+                "-an",  # No audio (test clip has no audio)
+                "-y",
+                $tempEncoded
+            )
+
+            # Add maxrate/bufsize only for x265 (not for SVT-AV1)
+            if ($EncodingParams.Codec -eq "HEVC_SVT") {
+                # x265 supports maxrate/bufsize
+                $testEncodeArgs = @(
+                    "-i", $tempSource,
+                    "-c:v", $ffmpegCodec,
+                    "-preset", $encoderPreset,
+                    "-b:v", $EncodingParams.VideoBitrate,
+                    "-maxrate", $EncodingParams.MaxRate,
+                    "-bufsize", $EncodingParams.BufSize,
+                    "-an",
+                    "-y",
+                    $tempEncoded
+                )
+            }
+        } else {
+            $testEncodeArgs = @(
+                "-hwaccel", $EncodingParams.HWAccel,
+                "-i", $tempSource,
+                "-c:v", $ffmpegCodec,
+                "-preset", $encoderPreset,
+                "-b:v", $EncodingParams.VideoBitrate,
+                "-maxrate", $EncodingParams.MaxRate,
+                "-bufsize", $EncodingParams.BufSize,
+                "-an",  # No audio (test clip has no audio)
+                "-y",
+                $tempEncoded
+            )
+        }
 
         $encodeOutput = & ffmpeg @testEncodeArgs 2>&1 | Out-String
 

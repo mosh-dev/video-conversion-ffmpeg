@@ -33,7 +33,7 @@ $FileExtensions = @("*.mp4", "*.mov", "*.mkv", "*.ts", "*.m2ts", "*.m4v", "*.web
 $EnableQualityPreview = $true     # Set to $true to enable quality preview, $false to skip
 
 # Duration of test clip in seconds
-$PreviewDuration = 10              # Test conversion duration (10 seconds recommended)
+$PreviewDuration = 5              # Test conversion duration (5 seconds recommended)
 
 # Start position for test clip (in seconds from video start)
 # "middle" = extract from middle of video, or specify seconds (e.g., 30 for 30 seconds from start)
@@ -43,14 +43,23 @@ $VMAF_Subsample = 100             # n_subsample for VMAF (1-500, lower = more ac
 # ============================================================================
 # CODEC SELECTION
 # ============================================================================
-# Options: "AV1" or "HEVC"
-# - AV1: Smallest file size, best compression, requires RTX 40-series GPU, less compatible with older players
-# - HEVC: Larger than AV1, excellent compression, works on most modern GPUs, better player compatibility
-$OutputCodec = "AV1"  # Change to "AV1" or "HEVC"
+# Options: "AV1_NVENC", "HEVC_NVENC", "AV1_SVT", "HEVC_SVT"
+# - AV1_NVENC: Hardware-accelerated AV1, fastest, requires RTX 40-series GPU
+# - HEVC_NVENC: Hardware-accelerated HEVC, fast, requires GTX 10-series or newer
+# - AV1_SVT: Software AV1 encoder (SVT-AV1), slower but works on all CPUs, best quality
+# - HEVC_SVT: Software HEVC encoder (x265), slower but works on all CPUs
+$OutputCodec = "AV1_NVENC"  # Change to "AV1_NVENC", "HEVC_NVENC", "AV1_SVT", or "HEVC_SVT"
 
 # ============================================================================
 # VIDEO ENCODING SETTINGS
 # ============================================================================
+
+# Bit Depth Selection
+# Options: "8bit", "10bit", "source"
+# - 8bit: Standard 8-bit color depth (smaller files, wider compatibility)
+# - 10bit: Enhanced 10-bit color depth (better gradients, HDR support, larger files)
+# - source: Match source video bit depth (recommended)
+$OutputBitDepth = "source"  # Change to "8bit", "10bit", or "source"
 
 # Default Encoding Preset (can be changed in GUI)
 # p1 = fastest, p7 = slowest with best compression and quality
@@ -122,10 +131,12 @@ $ParameterMap = @(
 # INTERNAL MAPPINGS (DO NOT MODIFY)
 # ============================================================================
 
-# Codec Mapping
+# Codec Mapping - Maps user-friendly codec names to ffmpeg encoder names
 $CodecMap = @{
-    "AV1"  = "av1_nvenc"
-    "HEVC" = "hevc_nvenc"
+    "AV1_NVENC"   = "av1_nvenc"     # NVIDIA hardware encoder
+    "HEVC_NVENC"  = "hevc_nvenc"    # NVIDIA hardware encoder
+    "AV1_SVT"     = "libsvtav1"     # SVT-AV1 software encoder
+    "HEVC_SVT"    = "libx265"       # x265 software encoder (HEVC)
 }
 
 # Audio codec mapping

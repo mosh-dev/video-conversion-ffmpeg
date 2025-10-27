@@ -16,7 +16,8 @@
       "Read(//d/**)",
       "Bash(Get-ChildItem -Path D:VideoConversion -Recurse -File -Depth 2)",
       "Bash(Select-Object FullName, Length)",
-      "Bash(Format-Table -AutoSize)"
+      "Bash(Format-Table -AutoSize)",
+      "Bash(Get-ChildItem -Path D:ffmpeg-ps-tools -Recurse -File -Depth 2)"
     ],
     "deny": [],
     "ask": []

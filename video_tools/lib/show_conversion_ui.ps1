@@ -7,6 +7,7 @@
 function Show-ConversionUI {
     param(
         [string]$OutputCodec,
+        [string]$OutputBitDepth,
         [bool]$PreserveContainer,
         [bool]$PreserveAudio,
         [double]$BitrateMultiplier,
@@ -436,8 +437,30 @@ function Show-ConversionUI {
                             FontSize="13"
                             Padding="12,10"
                             Margin="0,0,0,24">
-                            <ComboBoxItem Content="HEVC (H.265) - Better compatibility"/>
-                            <ComboBoxItem Content="AV1 - Best compression (RTX 40+ only)"/>
+                            <ComboBoxItem Content="HEVC NVENC - Hardware (GTX 10+ series)"/>
+                            <ComboBoxItem Content="AV1 NVENC - Hardware (RTX 40+ series)"/>
+                            <ComboBoxItem Content="HEVC SVT (x265) - Software (slower, all CPUs)"/>
+                            <ComboBoxItem Content="AV1 SVT - Software (slower, all CPUs)"/>
+                        </ComboBox>
+
+                        <!-- Bit Depth -->
+                        <TextBlock
+                            Text="Output Bit Depth"
+                            FontFamily="Segoe UI Variable, Segoe UI"
+                            FontSize="14"
+                            FontWeight="SemiBold"
+                            Foreground="$textColor"
+                            Margin="0,0,0,8"/>
+                        <ComboBox
+                            x:Name="BitDepthCombo"
+                            Style="{StaticResource ModernComboBox}"
+                            FontFamily="Segoe UI Variable, Segoe UI"
+                            FontSize="13"
+                            Padding="12,10"
+                            Margin="0,0,0,24">
+                            <ComboBoxItem Content="8-bit - Standard (smaller files, wider compatibility)"/>
+                            <ComboBoxItem Content="10-bit - Enhanced (better gradients, HDR support)"/>
+                            <ComboBoxItem Content="Same as source (recommended)"/>
                         </ComboBox>
 
                         <!-- Preset Slider -->
@@ -457,7 +480,7 @@ function Show-ConversionUI {
                             <TextBlock
                                 x:Name="PresetValue"
                                 Grid.Column="1"
-                                Text="p7"
+                                Text="Slowest"
                                 FontFamily="Segoe UI Variable, Segoe UI"
                                 FontSize="16"
                                 FontWeight="Bold"
@@ -469,8 +492,8 @@ function Show-ConversionUI {
                             x:Name="PresetSlider"
                             Style="{StaticResource ModernSlider}"
                             Minimum="1"
-                            Maximum="7"
-                            Value="7"
+                            Maximum="5"
+                            Value="5"
                             TickFrequency="1"
                             IsSnapToTickEnabled="True"
                             Margin="0,0,0,8"/>
@@ -481,13 +504,13 @@ function Show-ConversionUI {
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="p1 (fastest)" FontSize="11" Foreground="$secondaryTextColor" HorizontalAlignment="Left"/>
-                            <TextBlock Grid.Column="1" Text="p4" FontSize="11" Foreground="$secondaryTextColor" HorizontalAlignment="Center"/>
-                            <TextBlock Grid.Column="2" Text="p7 (slowest, best)" FontSize="11" Foreground="$secondaryTextColor" HorizontalAlignment="Right"/>
+                            <TextBlock Grid.Column="0" Text="Fastest" FontSize="11" Foreground="$secondaryTextColor" HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Column="1" Text="Medium" FontSize="11" Foreground="$secondaryTextColor" HorizontalAlignment="Center"/>
+                            <TextBlock Grid.Column="2" Text="Slowest (best quality)" FontSize="11" Foreground="$secondaryTextColor" HorizontalAlignment="Right"/>
                         </Grid>
 
                         <TextBlock
-                            Text="p1 = Fastest encoding, p7 = Slowest encoding with best compression and quality"
+                            Text="Faster presets encode quickly but use more bitrate. Slower presets take longer but produce better quality."
                             FontSize="11"
                             FontStyle="Italic"
                             Foreground="$secondaryTextColor"
@@ -719,6 +742,7 @@ public class WindowHelper {
     # Get controls
     $titleBar = $window.FindName("TitleBar")
     $codecCombo = $window.FindName("CodecCombo")
+    $bitDepthCombo = $window.FindName("BitDepthCombo")
     $presetSlider = $window.FindName("PresetSlider")
     $presetValue = $window.FindName("PresetValue")
     $containerCombo = $window.FindName("ContainerCombo")
@@ -737,15 +761,50 @@ public class WindowHelper {
     })
 
     # Set default values
-    $codecCombo.SelectedIndex = if ($OutputCodec -eq "HEVC") { 0 } else { 1 }
+    # Map codec selection to dropdown index (0=HEVC_NVENC, 1=AV1_NVENC, 2=HEVC_SVT, 3=AV1_SVT)
+    $codecCombo.SelectedIndex = switch ($OutputCodec) {
+        "HEVC_NVENC" { 0 }
+        "AV1_NVENC"  { 1 }
+        "HEVC_SVT"   { 2 }
+        "AV1_SVT"    { 3 }
+        default      { 1 }  # Default to AV1_NVENC
+    }
 
-    # Parse preset value (e.g., "p7" -> 7)
+    # Set default bit depth selection (0=8bit, 1=10bit, 2=source)
+    $bitDepthCombo.SelectedIndex = switch ($OutputBitDepth) {
+        "8bit"   { 0 }
+        "10bit"  { 1 }
+        "source" { 2 }
+        default  { 2 }  # Default to "Same as source"
+    }
+
+    # Parse preset value (e.g., "p7" -> 7, map to slider 1-5)
     $presetNumber = 7  # Default to p7
     if ($DefaultPreset -match "^p?(\d+)$") {
         $presetNumber = [int]$matches[1]
     }
-    $presetSlider.Value = $presetNumber
-    $presetValue.Text = "p$presetNumber"
+
+    # Map p1-p7 to universal preset slider (1=Fastest, 5=Slowest)
+    # p1-p2 = Fastest (1), p3 = Fast (2), p4-p5 = Medium (3), p6 = Slow (4), p7 = Slowest (5)
+    $sliderValue = switch ($presetNumber) {
+        { $_ -le 2 } { 1 }  # p1-p2 -> Fastest
+        3 { 2 }             # p3 -> Fast
+        { $_ -in 4,5 } { 3 }  # p4-p5 -> Medium
+        6 { 4 }             # p6 -> Slow
+        default { 5 }       # p7 -> Slowest
+    }
+
+    $presetSlider.Value = $sliderValue
+
+    # Set initial preset label
+    $presetLabel = switch ($sliderValue) {
+        1 { "Fastest" }
+        2 { "Fast" }
+        3 { "Medium" }
+        4 { "Slow" }
+        5 { "Slowest" }
+    }
+    $presetValue.Text = $presetLabel
 
     # Set container combo based on preserve flag
     if ($PreserveContainer) {
@@ -805,7 +864,14 @@ public class WindowHelper {
     # Preset slider event
     $presetSlider.Add_ValueChanged({
         $value = [int]$presetSlider.Value
-        $presetValue.Text = "p$value"
+        $presetLabel = switch ($value) {
+            1 { "Fastest" }
+            2 { "Fast" }
+            3 { "Medium" }
+            4 { "Slow" }
+            5 { "Slowest" }
+        }
+        $presetValue.Text = $presetLabel
     })
 
     # Video bitrate slider event
@@ -842,9 +908,37 @@ public class WindowHelper {
             default { ".mp4" }
         }
 
+        # Map codec selection index to codec name (0=HEVC_NVENC, 1=AV1_NVENC, 2=HEVC_SVT, 3=AV1_SVT)
+        $selectedCodec = switch ($codecCombo.SelectedIndex) {
+            0 { "HEVC_NVENC" }
+            1 { "AV1_NVENC" }
+            2 { "HEVC_SVT" }
+            3 { "AV1_SVT" }
+            default { "AV1_NVENC" }
+        }
+
+        # Map bit depth selection index to bit depth string (0=8bit, 1=10bit, 2=source)
+        $selectedBitDepth = switch ($bitDepthCombo.SelectedIndex) {
+            0 { "8bit" }
+            1 { "10bit" }
+            2 { "source" }
+            default { "source" }
+        }
+
+        # Map preset slider value to universal preset name (1=Fastest, 5=Slowest)
+        $selectedPreset = switch ([int]$presetSlider.Value) {
+            1 { "Fastest" }
+            2 { "Fast" }
+            3 { "Medium" }
+            4 { "Slow" }
+            5 { "Slowest" }
+            default { "Slowest" }
+        }
+
         return @{
-            Codec = if ($codecCombo.SelectedIndex -eq 0) { "HEVC" } else { "AV1" }
-            Preset = "p$([int]$presetSlider.Value)"
+            Codec = $selectedCodec
+            BitDepth = $selectedBitDepth
+            Preset = $selectedPreset
             PreserveContainer = ($containerCombo.SelectedIndex -eq 1)
             OutputExtension = $selectedExtension
             BitrateMultiplier = $bitrateSlider.Value / 10.0

@@ -33,6 +33,7 @@ $StartTime = Get-Date
 
 # Show UI and get user selections
 $uiResult = Show-ConversionUI -OutputCodec $OutputCodec `
+                              -OutputBitDepth $OutputBitDepth `
                               -PreserveContainer $PreserveContainer `
                               -PreserveAudio $PreserveAudio `
                               -BitrateMultiplier $BitrateMultiplier `
@@ -50,6 +51,7 @@ if ($uiResult.Cancelled) {
 # Apply selected values
 $OutputCodec = $uiResult.Codec
 $DefaultVideoCodec = $CodecMap[$OutputCodec]
+$OutputBitDepth = $uiResult.BitDepth
 $PreserveContainer = $uiResult.PreserveContainer
 $PreserveAudio = $uiResult.PreserveAudio
 $BitrateMultiplier = $uiResult.BitrateMultiplier
@@ -114,12 +116,19 @@ if ($VideoFiles.Count -eq 0) {
 $AudioDisplay = if ($PreserveAudio) { "Copy original" } else { "Re-encode to $($AudioCodec.ToUpper()) @ ${SelectedAACBitrate}kbps" }
 $ContainerDisplay = if ($PreserveContainer) { "Preserve original" } else { "Convert to $OutputExtension" }
 $SkipModeDisplay = if ($SkipExistingFiles) { "Skip existing" } else { "Overwrite all" }
+$BitDepthDisplay = switch ($OutputBitDepth) {
+    "8bit"   { "8-bit (standard)" }
+    "10bit"  { "10-bit (enhanced)" }
+    "source" { "Same as source" }
+    default  { "Same as source" }
+}
 
 Write-Host "`n========================================" -ForegroundColor Cyan
 Write-Host "  CONVERSION SETTINGS" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  Files:               $($VideoFiles.Count) video(s) found" -ForegroundColor White
 Write-Host "  Output Video Codec:  $OutputCodec" -ForegroundColor White
+Write-Host "  Output Bit Depth:    $BitDepthDisplay" -ForegroundColor White
 Write-Host "  Encoding Preset:     $SelectedPreset" -ForegroundColor White
 Write-Host "  Bitrate Multiplier:  $($BitrateMultiplier.ToString('0.0'))x" -ForegroundColor White
 Write-Host "  Container:           $ContainerDisplay" -ForegroundColor White
@@ -132,6 +141,7 @@ Write-Host "========================================`n" -ForegroundColor Cyan
 [System.IO.File]::AppendAllText($LogFile, ("=" * 80) + "`n", [System.Text.UTF8Encoding]::new($false))
 [System.IO.File]::AppendAllText($LogFile, "Files:               $($VideoFiles.Count) video(s) found`n", [System.Text.UTF8Encoding]::new($false))
 [System.IO.File]::AppendAllText($LogFile, "Output Video Codec:  $OutputCodec`n", [System.Text.UTF8Encoding]::new($false))
+[System.IO.File]::AppendAllText($LogFile, "Output Bit Depth:    $BitDepthDisplay`n", [System.Text.UTF8Encoding]::new($false))
 [System.IO.File]::AppendAllText($LogFile, "Encoding Preset:     $SelectedPreset`n", [System.Text.UTF8Encoding]::new($false))
 [System.IO.File]::AppendAllText($LogFile, "Bitrate Multiplier:  $($BitrateMultiplier.ToString('0.0'))x`n", [System.Text.UTF8Encoding]::new($false))
 [System.IO.File]::AppendAllText($LogFile, "Container:           $ContainerDisplay`n", [System.Text.UTF8Encoding]::new($false))
@@ -387,139 +397,469 @@ foreach ($File in $VideoFiles) {
         [System.IO.File]::AppendAllText($LogFile, "  Rotation detected: ${Rotation}° - preserving as-is (same container)`n", [System.Text.UTF8Encoding]::new($false))
     }
 
-    # Get hardware acceleration method from mapping
-    $HWAccelMethod = Get-HardwareAccelMethod -FileExtension $File.Extension
+    # Determine if we're using a software encoder (SVT)
+    $IsSoftwareEncoder = ($OutputCodec -eq "AV1_SVT" -or $OutputCodec -eq "HEVC_SVT")
 
-    # Build input arguments with hardware acceleration
-    # Only auto-rotate when container format is changing (e.g., MP4 → MKV)
-    if ($HWAccelMethod -eq "cuda") {
-        # NVIDIA NVDEC: Fastest, supports most codecs including VC-1 (WMV)
+    # Get hardware acceleration method from mapping (only for hardware encoders)
+    if ($IsSoftwareEncoder) {
+        # SVT encoders are CPU-based, no hardware acceleration
+        Write-Host "  Note: Using software encoder (CPU-based)" -ForegroundColor DarkGray
+        [System.IO.File]::AppendAllText($LogFile, "  Encoder: Software (CPU-based) - $OutputCodec`n", [System.Text.UTF8Encoding]::new($false))
         $FFmpegArgs = @(
-            "-hwaccel", "cuda",
-            "-hwaccel_output_format", "cuda",
-            "-i", $InputPath
-        )
-        $UseCUDA = $true
-    } elseif ($HWAccelMethod -eq "d3d11va") {
-        # D3D11VA: Windows-native, works on NVIDIA/AMD/Intel GPUs
-        Write-Host "  Note: Using D3D11VA hardware decoding" -ForegroundColor DarkGray
-        [System.IO.File]::AppendAllText($LogFile, "  Hardware Acceleration: D3D11VA`n", [System.Text.UTF8Encoding]::new($false))
-        $FFmpegArgs = @(
-            "-hwaccel", "d3d11va",
             "-i", $InputPath
         )
         $UseCUDA = $false
+        $HWAccelMethod = "software"
     } else {
-        # Software decoding fallback (should rarely be needed)
-        Write-Host "  Note: Using software decoding" -ForegroundColor DarkGray
-        [System.IO.File]::AppendAllText($LogFile, "  Hardware Acceleration: Software decoding (no HW accel)`n", [System.Text.UTF8Encoding]::new($false))
-        $FFmpegArgs = @(
-            "-i", $InputPath
-        )
-        $UseCUDA = $false
+        # Hardware encoders (NVENC) - use hardware acceleration
+        $HWAccelMethod = Get-HardwareAccelMethod -FileExtension $File.Extension
+
+        # Build input arguments with hardware acceleration
+        # Only auto-rotate when container format is changing (e.g., MP4 → MKV)
+        if ($HWAccelMethod -eq "cuda") {
+            # NVIDIA NVDEC: Fastest, supports most codecs including VC-1 (WMV)
+            $FFmpegArgs = @(
+                "-hwaccel", "cuda",
+                "-hwaccel_output_format", "cuda",
+                "-i", $InputPath
+            )
+            $UseCUDA = $true
+        } elseif ($HWAccelMethod -eq "d3d11va") {
+            # D3D11VA: Windows-native, works on NVIDIA/AMD/Intel GPUs
+            Write-Host "  Note: Using D3D11VA hardware decoding" -ForegroundColor DarkGray
+            [System.IO.File]::AppendAllText($LogFile, "  Hardware Acceleration: D3D11VA`n", [System.Text.UTF8Encoding]::new($false))
+            $FFmpegArgs = @(
+                "-hwaccel", "d3d11va",
+                "-i", $InputPath
+            )
+            $UseCUDA = $false
+        } else {
+            # Software decoding fallback (should rarely be needed)
+            Write-Host "  Note: Using software decoding" -ForegroundColor DarkGray
+            [System.IO.File]::AppendAllText($LogFile, "  Hardware Acceleration: Software decoding (no HW accel)`n", [System.Text.UTF8Encoding]::new($false))
+            $FFmpegArgs = @(
+                "-i", $InputPath
+            )
+            $UseCUDA = $false
+        }
     }
 
     # Preserve metadata (but we'll clear rotation after auto-rotating)
     $FFmpegArgs += @("-map_metadata", "0")
 
-    # For MKV files, add specific stream mapping
-    if ($File.Extension -match "^\.(mkv|MKV)$") {
+    # Map all streams: video, audio, subtitles (when supported)
+    # Subtitle support by container: MP4/MOV (mov_text), MKV (srt/ass/ssa/vobsub), WebM (webvtt)
+    $SubtitleSupportedContainers = @(".mp4", ".m4v", ".mov", ".mkv", ".webm")
+    if ($FileExtension.ToLower() -in $SubtitleSupportedContainers) {
+        Write-Host "  Subtitle Streams: Preserving (if present)" -ForegroundColor DarkGray
+        [System.IO.File]::AppendAllText($LogFile, "  Subtitle Streams: Preserving (container supports subtitles)`n", [System.Text.UTF8Encoding]::new($false))
+
         $FFmpegArgs += @(
-            "-map", "0",           # Map all streams (video, audio, subtitles, data, metadata)
-            "-fflags", "+genpts",  # Generate presentation timestamps
-            "-ignore_unknown",     # Ignore unknown streams
-            "-codec:s", "copy",    # Copy subtitle streams
-            "-codec:d", "copy"     # Copy data streams (including metadata)
+            "-map", "0:v",     # Map video stream
+            "-map", "0:a?",    # Map audio streams (optional, ? means don't fail if missing)
+            "-map", "0:s?"     # Map subtitle streams (optional)
         )
+
+        # For MKV, add additional stream handling
+        if ($File.Extension -match "^\.(mkv|MKV)$") {
+            $FFmpegArgs += @(
+                "-fflags", "+genpts",    # Generate presentation timestamps
+                "-ignore_unknown",        # Ignore unknown streams
+                "-codec:s", "copy",       # Copy subtitle streams
+                "-codec:d", "copy"        # Copy data streams (fonts, attachments)
+            )
+        } else {
+            $FFmpegArgs += @("-codec:s", "copy")  # Copy subtitle streams for other containers
+        }
+    } else {
+        # For containers without subtitle support, just map video and audio
+        Write-Host "  Subtitle Streams: Not supported by container format" -ForegroundColor DarkGray
     }
 
-    # Determine the format based on source bit depth
+    # Determine output bit depth based on user selection
+    $TargetBitDepth = switch ($OutputBitDepth) {
+        "8bit"   { 8 }
+        "10bit"  { 10 }
+        "source" { $SourceBitDepth }
+        default  { $SourceBitDepth }
+    }
+
+    # Log bit depth selection
+    if ($OutputBitDepth -eq "source") {
+        Write-Host "  Bit Depth: $TargetBitDepth-bit (same as source)" -ForegroundColor DarkGray
+    } else {
+        Write-Host "  Bit Depth: $TargetBitDepth-bit (user selected)" -ForegroundColor DarkGray
+    }
+    [System.IO.File]::AppendAllText($LogFile, "  Bit Depth: $TargetBitDepth-bit ($OutputBitDepth)`n", [System.Text.UTF8Encoding]::new($false))
+
+    # Determine the pixel format based on target bit depth
     if ($UseCUDA) {
-        if ($SourceBitDepth -eq 10) {
+        # CUDA hardware scaling with format
+        if ($TargetBitDepth -eq 10) {
             $FFmpegArgs += @("-vf", "scale_cuda=format=p010le")
         } else {
             $FFmpegArgs += @("-vf", "scale_cuda=format=yuv420p")
         }
     } else {
-        if ($SourceBitDepth -eq 10) {
-            $FFmpegArgs += @("-vf", "scale=format=p010le")
+        # Software encoding: use format filter (scale filter doesn't support 'format' option)
+        if ($TargetBitDepth -eq 10) {
+            $FFmpegArgs += @("-vf", "format=yuv420p10le")
         } else {
-            $FFmpegArgs += @("-vf", "scale=format=yuv420p")
+            $FFmpegArgs += @("-vf", "format=yuv420p")
         }
     }
 
-    # Add video encoding parameters
-    $FFmpegArgs += @(
-        "-c:v", $DefaultVideoCodec,
-        "-preset", $Preset,
-        "-b:v", $VideoBitrate,
-        "-maxrate", $MaxRate,
-        "-bufsize", $BufSize,
-        "-multipass", $DefaultMultipass
-    )
+    # HDR Metadata Preservation (for 10-bit content)
+    $IsHDR = $false
+    if ($TargetBitDepth -eq 10 -and $Metadata) {
+        # Check if source has HDR metadata (BT.2020, PQ/HLG transfer)
+        $HasHDRColorSpace = $Metadata.ColorPrimaries -match "bt2020" -or $Metadata.ColorSpaceRaw -match "bt2020"
+        $HasHDRTransfer = $Metadata.ColorTransfer -match "smpte2084|arib-std-b67" # PQ (HDR10) or HLG
 
-    # Add encoder-specific flags for NVENC codecs
-    if ($DefaultVideoCodec -eq "av1_nvenc" -or $DefaultVideoCodec -eq "hevc_nvenc") {
-        $FFmpegArgs += @(
+        if ($HasHDRColorSpace -or $HasHDRTransfer) {
+            $IsHDR = $true
+            Write-Host "  HDR Metadata: Preserving (BT.2020 / $($Metadata.ColorTransfer))" -ForegroundColor DarkGray
+            [System.IO.File]::AppendAllText($LogFile, "  HDR Metadata: Preserving - Primaries=$($Metadata.ColorPrimaries), Transfer=$($Metadata.ColorTransfer), Space=$($Metadata.ColorSpaceRaw), Range=$($Metadata.ColorRange)`n", [System.Text.UTF8Encoding]::new($false))
+
+            # Add HDR metadata flags
+            if ($Metadata.ColorPrimaries -and $Metadata.ColorPrimaries -ne "unknown") {
+                $FFmpegArgs += @("-color_primaries", $Metadata.ColorPrimaries)
+            }
+            if ($Metadata.ColorTransfer -and $Metadata.ColorTransfer -ne "unknown") {
+                $FFmpegArgs += @("-color_trc", $Metadata.ColorTransfer)
+            }
+            if ($Metadata.ColorSpaceRaw -and $Metadata.ColorSpaceRaw -ne "unknown") {
+                $FFmpegArgs += @("-colorspace", $Metadata.ColorSpaceRaw)
+            }
+            if ($Metadata.ColorRange -and $Metadata.ColorRange -ne "unknown") {
+                $FFmpegArgs += @("-color_range", $Metadata.ColorRange)
+            }
+        } else {
+            Write-Host "  HDR Metadata: None detected (SDR content)" -ForegroundColor DarkGray
+        }
+    } elseif ($TargetBitDepth -eq 8) {
+        Write-Host "  HDR Metadata: Not preserving (converting to 8-bit SDR)" -ForegroundColor DarkGray
+    }
+
+    # Map universal preset names to encoder-specific presets
+    # Universal: Fastest, Fast, Medium, Slow, Slowest
+    # NVENC: p1 (fastest) to p7 (slowest)
+    # SVT-AV1: 13 (fastest) to 7 (slowest) (we use range 7-13, not full 0-13)
+    # x265: veryfast to veryslow
+    $EncoderPreset = switch ($Preset) {
+        "Fastest" {
+            if ($IsSoftwareEncoder) {
+                if ($OutputCodec -eq "AV1_SVT") { "13" }      # SVT-AV1: Fastest
+                else { "veryfast" }                            # x265: Fastest
+            } else {
+                "p1"                                           # NVENC: Fastest
+            }
+        }
+        "Fast" {
+            if ($IsSoftwareEncoder) {
+                if ($OutputCodec -eq "AV1_SVT") { "11" }      # SVT-AV1: Fast
+                else { "fast" }                                # x265: Fast
+            } else {
+                "p3"                                           # NVENC: Fast
+            }
+        }
+        "Medium" {
+            if ($IsSoftwareEncoder) {
+                if ($OutputCodec -eq "AV1_SVT") { "9" }       # SVT-AV1: Medium
+                else { "medium" }                              # x265: Medium
+            } else {
+                "p5"                                           # NVENC: Medium
+            }
+        }
+        "Slow" {
+            if ($IsSoftwareEncoder) {
+                if ($OutputCodec -eq "AV1_SVT") { "8" }       # SVT-AV1: Slow
+                else { "slower" }                              # x265: Slow
+            } else {
+                "p6"                                           # NVENC: Slow
+            }
+        }
+        "Slowest" {
+            if ($IsSoftwareEncoder) {
+                if ($OutputCodec -eq "AV1_SVT") { "7" }       # SVT-AV1: Slowest
+                else { "veryslow" }                            # x265: Slowest
+            } else {
+                "p7"                                           # NVENC: Slowest
+            }
+        }
+        default {
+            # Fallback for legacy p1-p7 format (if still used)
+            if ($Preset -match "^p(\d+)$") {
+                $PresetNum = [int]$matches[1]
+                if ($IsSoftwareEncoder) {
+                    if ($OutputCodec -eq "AV1_SVT") {
+                        $SVTNum = 14 - $PresetNum
+                        "$SVTNum"
+                    } else {
+                        $x265Map = @{ 1="veryfast"; 2="faster"; 3="fast"; 4="medium"; 5="slow"; 6="slower"; 7="veryslow" }
+                        $x265Map[$PresetNum]
+                    }
+                } else {
+                    $Preset
+                }
+            } else {
+                # Unknown preset, use slowest for safety
+                if ($IsSoftwareEncoder) {
+                    if ($OutputCodec -eq "AV1_SVT") { "7" }
+                    else { "veryslow" }
+                } else {
+                    "p7"
+                }
+            }
+        }
+    }
+
+    # Build common video parameters
+    $CommonVideoParams = @()
+
+    if ($IsSoftwareEncoder) {
+        # SVT Encoders - Software-based with 2-pass encoding
+
+        if ($OutputCodec -eq "AV1_SVT") {
+            # SVT-AV1 uses numeric presets: 0 (slowest/best) to 13 (fastest/lowest quality)
+            # Note: SVT-AV1 does NOT support -maxrate/-bufsize in VBR mode (only in CRF mode)
+            Write-Host "  SVT-AV1 Preset: $EncoderPreset (2-pass encoding, mapped from $Preset)" -ForegroundColor DarkGray
+            [System.IO.File]::AppendAllText($LogFile, "  SVT-AV1 Preset: $EncoderPreset (2-pass encoding, mapped from $Preset)`n", [System.Text.UTF8Encoding]::new($false))
+
+            $CommonVideoParams = @(
+                "-c:v", $DefaultVideoCodec,
+                "-preset", $EncoderPreset,
+                "-b:v", $VideoBitrate,
+                # Note: maxrate/bufsize NOT supported in VBR mode for SVT-AV1
+                "-g", "240",           # Keyframe interval
+                "-svtav1-params", "tune=0:enable-qm=1:qm-min=0"  # Tune for quality
+            )
+            # Note: Pixel format is set by the format filter, not here
+        } elseif ($OutputCodec -eq "HEVC_SVT") {
+            # x265 (libx265) uses text presets with 2-pass encoding
+            Write-Host "  x265 Preset: $EncoderPreset (2-pass encoding, mapped from $Preset)" -ForegroundColor DarkGray
+            [System.IO.File]::AppendAllText($LogFile, "  x265 Preset: $EncoderPreset (2-pass encoding, mapped from $Preset)`n", [System.Text.UTF8Encoding]::new($false))
+
+            $CommonVideoParams = @(
+                "-c:v", $DefaultVideoCodec,
+                "-preset", $EncoderPreset,
+                "-b:v", $VideoBitrate,
+                "-maxrate", $MaxRate,
+                "-bufsize", $BufSize
+            )
+            # Note: Pixel format is set by the scale filter, not here
+        }
+    } else {
+        # NVENC Encoders - Hardware-accelerated with single-pass NVENC parameters
+        Write-Host "  NVENC Preset: $EncoderPreset (single-pass with multipass, mapped from $Preset)" -ForegroundColor DarkGray
+        [System.IO.File]::AppendAllText($LogFile, "  NVENC Preset: $EncoderPreset (single-pass with multipass, mapped from $Preset)`n", [System.Text.UTF8Encoding]::new($false))
+
+        $CommonVideoParams = @(
+            "-c:v", $DefaultVideoCodec,
+            "-preset", $EncoderPreset,
+            "-b:v", $VideoBitrate,
+            "-maxrate", $MaxRate,
+            "-bufsize", $BufSize,
+            "-multipass", $DefaultMultipass,
             "-tune:v", "hq",
             "-rc:v", "vbr",
             "-tier:v", "0"
         )
     }
 
-    # Add container-specific flags for MP4/MOV containers
-    if ($FileExtension.ToLower() -match "\.(mp4|m4v|mov)$") {
-        if ($DefaultVideoCodec -eq "av1_nvenc") {
-            $FFmpegArgs += @("-movflags", "+faststart+write_colr")
-        } elseif ($DefaultVideoCodec -eq "hevc_nvenc") {
-            $FFmpegArgs += @("-movflags", "+faststart")
-        }
-    }
-
-    # Add audio encoding parameters
-    $FFmpegArgs += @("-c:a", $AudioCodecToUse)
-
-    # Add audio bitrate only if re-encoding audio
-    if ($AudioBitrate) {
-        $FFmpegArgs += @("-b:a", $AudioBitrate)
-    }
-
-    # Add audio sample rate if specified
-    if ($AudioSampleRate) {
-        $FFmpegArgs += @("-ar", $AudioSampleRate)
-    }
-
-    # For AAC audio, add compatibility settings
-    if ($AudioCodecToUse -eq "aac") {
-        $FFmpegArgs += @("-ac", "2")  # Downmix to stereo for maximum compatibility
-    }
-
-    # Add common flags
-    $FFmpegArgs += @(
-        "-loglevel", "error",
-        "-stats"
-    )
-
-    # Always allow overwrite for temp files (we'll handle final file existence separately)
-    $FFmpegArgs = @("-y") + $FFmpegArgs
-
-    # Get FFmpeg format from mapping
-    $OutputFormat = Get-FFmpegFormat -Container $FileExtension
-
-    # Add output format and temporary output path
-    $FFmpegArgs += @("-f", $OutputFormat, $TempOutputPath)
-
-    # Log the ffmpeg command to log file
-    $FFmpegCommand = "ffmpeg " + ($FFmpegArgs -join " ")
-    [System.IO.File]::AppendAllText($LogFile, "Command: $FFmpegCommand`n", [System.Text.UTF8Encoding]::new($false))
-
-    # Execute ffmpeg
+    # Execute encoding (2-pass for SVT, single-pass for NVENC)
     $ProcessStartTime = Get-Date
+    $ExitCode = 0
 
     try {
-        # Use & operator instead of Start-Process for better argument handling
-        & ffmpeg @FFmpegArgs
-        $ExitCode = $LASTEXITCODE
+        if ($IsSoftwareEncoder) {
+            # 2-PASS ENCODING FOR SVT
+            $PassLogFile = Join-Path $OutputDir "ffmpeg2pass_$($BaseFileName)"
+
+            # Build base input args (no stream mappings)
+            # Start fresh without the stream mappings from $FFmpegArgs
+            $BaseInputArgs = @()
+
+            # Add input with proper decoding (no hwaccel for software encoders)
+            $BaseInputArgs += @("-i", $InputPath)
+
+            # Add metadata preservation
+            $BaseInputArgs += @("-map_metadata", "0")
+
+            # Add pixel format filter for software encoding (no scaling, just format conversion)
+            if ($TargetBitDepth -eq 10) {
+                $BaseInputArgs += @("-vf", "format=yuv420p10le")
+            } else {
+                $BaseInputArgs += @("-vf", "format=yuv420p")
+            }
+
+            # Add HDR metadata if applicable
+            if ($IsHDR) {
+                if ($Metadata.ColorPrimaries -and $Metadata.ColorPrimaries -ne "unknown") {
+                    $BaseInputArgs += @("-color_primaries", $Metadata.ColorPrimaries)
+                }
+                if ($Metadata.ColorTransfer -and $Metadata.ColorTransfer -ne "unknown") {
+                    $BaseInputArgs += @("-color_trc", $Metadata.ColorTransfer)
+                }
+                if ($Metadata.ColorSpaceRaw -and $Metadata.ColorSpaceRaw -ne "unknown") {
+                    $BaseInputArgs += @("-colorspace", $Metadata.ColorSpaceRaw)
+                }
+                if ($Metadata.ColorRange -and $Metadata.ColorRange -ne "unknown") {
+                    $BaseInputArgs += @("-color_range", $Metadata.ColorRange)
+                }
+            }
+
+            # ===== PASS 1 =====
+            Write-Host "  Pass 1/2: Analyzing..." -ForegroundColor Yellow
+
+            $Pass1Args = @("-y") + $BaseInputArgs
+
+            # Map only video stream for Pass 1
+            $Pass1Args += @("-map", "0:v:0")
+
+            # Add video encoding parameters
+            $Pass1Args += $CommonVideoParams
+
+            # Add pass 1 specific parameters
+            if ($OutputCodec -eq "AV1_SVT") {
+                $Pass1Args += @("-pass", "1", "-passlogfile", $PassLogFile)
+            } elseif ($OutputCodec -eq "HEVC_SVT") {
+                # x265 pass 1
+                $Pass1Args += @(
+                    "-x265-params", "pass=1:stats=$PassLogFile.log:log-level=error",
+                    "-pass", "1"
+                )
+            }
+
+            # Pass 1 outputs to NUL (no audio, no subtitles)
+            $Pass1Args += @("-an", "-sn", "-f", "null", "NUL")
+
+            # Log Pass 1 command
+            $Pass1Command = "ffmpeg " + ($Pass1Args -join " ")
+            [System.IO.File]::AppendAllText($LogFile, "Pass 1 Command: $Pass1Command`n", [System.Text.UTF8Encoding]::new($false))
+
+            # Execute Pass 1 (capture output for error reporting)
+            $Pass1Output = & ffmpeg @Pass1Args 2>&1 | Out-String
+            $ExitCode = $LASTEXITCODE
+
+            if ($ExitCode -ne 0) {
+                Write-Host "  Pass 1 failed (code: $ExitCode)" -ForegroundColor Red
+
+                # Show relevant error lines from ffmpeg output
+                $errorLines = $Pass1Output -split "`n" | Where-Object {
+                    $_ -match "(error|failed|invalid|not supported|cannot|unable)" -and
+                    $_ -notmatch "deprecated"
+                } | Select-Object -First 5
+
+                if ($errorLines) {
+                    Write-Host "  Error details:" -ForegroundColor Yellow
+                    foreach ($line in $errorLines) {
+                        Write-Host "    $($line.Trim())" -ForegroundColor Red
+                    }
+                }
+
+                throw "Pass 1 encoding failed"
+            }
+
+            Write-Host "  Pass 1/2: Complete" -ForegroundColor Green
+
+            # ===== PASS 2 =====
+            Write-Host "  Pass 2/2: Encoding..." -ForegroundColor Yellow
+
+            # Pass 2 includes all streams (video, audio, subtitles)
+            $Pass2Args = @("-y") + $FFmpegArgs + $CommonVideoParams
+
+            # Add pass 2 specific parameters
+            if ($OutputCodec -eq "AV1_SVT") {
+                $Pass2Args += @("-pass", "2", "-passlogfile", $PassLogFile)
+            } elseif ($OutputCodec -eq "HEVC_SVT") {
+                # x265 pass 2
+                $Pass2Args += @(
+                    "-x265-params", "pass=2:stats=$PassLogFile.log:log-level=error",
+                    "-pass", "2"
+                )
+            }
+
+            # Add audio encoding parameters for Pass 2
+            $Pass2Args += @("-c:a", $AudioCodecToUse)
+            if ($AudioBitrate) {
+                $Pass2Args += @("-b:a", $AudioBitrate)
+            }
+            if ($AudioSampleRate) {
+                $Pass2Args += @("-ar", $AudioSampleRate)
+            }
+            if ($AudioCodecToUse -eq "aac") {
+                $Pass2Args += @("-ac", "2")
+            }
+
+            # Add container-specific flags
+            if ($FileExtension.ToLower() -match "\.(mp4|m4v|mov)$") {
+                if ($DefaultVideoCodec -eq "libsvtav1") {
+                    $Pass2Args += @("-movflags", "+faststart+write_colr")
+                } elseif ($DefaultVideoCodec -eq "libx265") {
+                    $Pass2Args += @("-movflags", "+faststart")
+                }
+            }
+
+            # Add common flags and output
+            $OutputFormat = Get-FFmpegFormat -Container $FileExtension
+            $Pass2Args += @("-loglevel", "error", "-stats", "-f", $OutputFormat, $TempOutputPath)
+
+            # Log Pass 2 command
+            $Pass2Command = "ffmpeg " + ($Pass2Args -join " ")
+            [System.IO.File]::AppendAllText($LogFile, "Pass 2 Command: $Pass2Command`n", [System.Text.UTF8Encoding]::new($false))
+
+            # Execute Pass 2
+            & ffmpeg @Pass2Args
+            $ExitCode = $LASTEXITCODE
+
+            # Clean up pass log files
+            Remove-Item "$PassLogFile*" -Force -ErrorAction SilentlyContinue
+
+            if ($ExitCode -eq 0) {
+                Write-Host "  Pass 2/2: Complete" -ForegroundColor Green
+            }
+
+        } else {
+            # SINGLE-PASS ENCODING FOR NVENC
+            $FFmpegArgs += $CommonVideoParams
+
+            # Add container-specific flags
+            if ($FileExtension.ToLower() -match "\.(mp4|m4v|mov)$") {
+                if ($DefaultVideoCodec -eq "av1_nvenc") {
+                    $FFmpegArgs += @("-movflags", "+faststart+write_colr")
+                } elseif ($DefaultVideoCodec -eq "hevc_nvenc") {
+                    $FFmpegArgs += @("-movflags", "+faststart")
+                }
+            }
+
+            # Add audio encoding parameters
+            $FFmpegArgs += @("-c:a", $AudioCodecToUse)
+            if ($AudioBitrate) {
+                $FFmpegArgs += @("-b:a", $AudioBitrate)
+            }
+            if ($AudioSampleRate) {
+                $FFmpegArgs += @("-ar", $AudioSampleRate)
+            }
+            if ($AudioCodecToUse -eq "aac") {
+                $FFmpegArgs += @("-ac", "2")
+            }
+
+            # Add common flags and output
+            $OutputFormat = Get-FFmpegFormat -Container $FileExtension
+            $FFmpegArgs += @("-loglevel", "error", "-stats", "-f", $OutputFormat, $TempOutputPath)
+
+            # Always allow overwrite
+            $FFmpegArgs = @("-y") + $FFmpegArgs
+
+            # Log command
+            $FFmpegCommand = "ffmpeg " + ($FFmpegArgs -join " ")
+            [System.IO.File]::AppendAllText($LogFile, "Command: $FFmpegCommand`n", [System.Text.UTF8Encoding]::new($false))
+
+            # Execute ffmpeg
+            & ffmpeg @FFmpegArgs
+            $ExitCode = $LASTEXITCODE
+        }
 
         if ($ExitCode -eq 0) {
             $ProcessEndTime = Get-Date
