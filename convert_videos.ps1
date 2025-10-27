@@ -14,6 +14,7 @@
 
 # Load helper functions
 . .\lib\helpers.ps1
+. .\lib\quality_preview_helper.ps1
 
 # ============================================================================
 # SCRIPT LOGIC (DO NOT MODIFY BELOW UNLESS YOU KNOW WHAT YOU'RE DOING)
@@ -312,6 +313,60 @@ foreach ($File in $VideoFiles) {
         }
         $AudioBitrate = "${SelectedAACBitrate}k"
         $AudioSampleRate = Get-AACSampleRate -InputPath $InputPath
+    }
+
+    # ============================================================================
+    # QUALITY PREVIEW (10-second VMAF test)
+    # ============================================================================
+
+    if ($EnableQualityPreview) {
+        Write-Host ""
+        Write-Host "  === QUALITY PREVIEW ===" -ForegroundColor Cyan
+
+        # Prepare encoding parameters for test
+        $testParams = @{
+            Codec = $OutputCodec
+            HWAccel = (Get-HardwareAccelMethod -FileExtension $File.Extension)
+            Preset = $Preset
+            VideoBitrate = $VideoBitrate
+            MaxRate = $MaxRate
+            BufSize = $BufSize
+        }
+
+        # Run quality preview test
+        $vmafScore = Test-ConversionQuality -SourcePath $InputPath `
+                                           -EncodingParams $testParams `
+                                           -TestDuration $PreviewDuration `
+                                           -StartPosition $PreviewStartPosition
+
+        if ($null -ne $vmafScore) {
+            # Display VMAF score with color coding
+            $scoreColor = if ($vmafScore -ge 95) { "Green" } `
+                         elseif ($vmafScore -ge 90) { "Cyan" } `
+                         elseif ($vmafScore -ge 80) { "Yellow" } `
+                         else { "Red" }
+
+            $assessment = if ($vmafScore -ge 95) { "Excellent" } `
+                         elseif ($vmafScore -ge 90) { "Very Good" } `
+                         elseif ($vmafScore -ge 80) { "Acceptable" } `
+                         else { "Poor" }
+
+            Write-Host ""
+            Write-Host "  VMAF Score: " -NoNewline -ForegroundColor White
+            Write-Host "$vmafScore" -NoNewline -ForegroundColor $scoreColor
+            Write-Host " / 100 (" -NoNewline -ForegroundColor White
+            Write-Host "$assessment" -NoNewline -ForegroundColor $scoreColor
+            Write-Host ")" -ForegroundColor White
+
+            Write-Host "  Parameters: Codec=$OutputCodec Preset=$Preset Bitrate=$VideoBitrate" -ForegroundColor Gray
+            Write-Host "  =======================`n" -ForegroundColor Cyan
+
+            # Log VMAF score
+            [System.IO.File]::AppendAllText($LogFile, "  Quality Preview: VMAF=$vmafScore ($assessment) - Codec=$OutputCodec Preset=$Preset Bitrate=$VideoBitrate`n", [System.Text.UTF8Encoding]::new($false))
+        } else {
+            Write-Host "  Quality preview skipped (VMAF test failed)" -ForegroundColor Yellow
+            Write-Host "  =======================`n" -ForegroundColor Cyan
+        }
     }
 
     # Build ffmpeg command

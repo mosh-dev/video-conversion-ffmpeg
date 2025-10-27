@@ -26,6 +26,20 @@ $SkipExistingFiles = $true        # Set to $true to skip existing output files (
 $FileExtensions = @("*.mp4", "*.mov", "*.mkv", "*.ts", "*.m2ts", "*.m4v", "*.webm", "*.wmv", "*.avi")
 
 # ============================================================================
+# QUALITY PREVIEW (VMAF TEST)
+# ============================================================================
+
+# Enable 10-second test conversion with VMAF quality check before each full conversion
+$EnableQualityPreview = $true     # Set to $true to enable quality preview, $false to skip
+
+# Duration of test clip in seconds
+$PreviewDuration = 10              # Test conversion duration (10 seconds recommended)
+
+# Start position for test clip (in seconds from video start)
+# "middle" = extract from middle of video, or specify seconds (e.g., 30 for 30 seconds from start)
+$PreviewStartPosition = "middle"
+
+# ============================================================================
 # CODEC SELECTION
 # ============================================================================
 # Options: "AV1" or "HEVC"
