@@ -1,12 +1,12 @@
-# Ignore all files inside these directories, but keep the folders
-_input_files/*
-!_input_files/.gitkeep
-_output_files/*
-!_output_files/.gitkeep
-logs/*
-!logs/.gitkeep
-reports/*
-!reports/.gitkeep
+# Ignore all files inside these directories anywhere, but keep the folders
+**/_input_files/*
+!**/_input_files/.gitkeep
+**/_output_files/*
+!**/_output_files/.gitkeep
+**/logs/*
+!**/logs/.gitkeep
+**/reports/*
+!**/reports/.gitkeep
 
 # IDE configuration
 .idea/
