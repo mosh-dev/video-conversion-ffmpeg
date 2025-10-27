@@ -178,50 +178,20 @@ function Compare-VideoQuality {
             "-"
         )
 
-        # Run ffmpeg with progress tracking
-        Write-Host "  Progress: 0%" -NoNewline -ForegroundColor Yellow
+        # Run ffmpeg and show output directly in console
+        Write-Host ""
 
-        # Use Start-Job to capture ffmpeg output (including stderr)
-        $captureJob = Start-Job -ScriptBlock {
-            param($argList)
-            & ffmpeg @argList 2>&1
-        } -ArgumentList (,$ffmpegArgs)
+        # Use temporary file to capture output while showing it
+        $tempLogFile = Join-Path $env:TEMP "ffmpeg_$(Get-Date -Format 'yyyyMMddHHmmss').log"
 
-        # Track progress
-        $lastProgress = 0
-        $ffmpegOutput = ""
+        # Run ffmpeg with Tee-Object to show AND save output
+        & ffmpeg @ffmpegArgs 2>&1 | Tee-Object -FilePath $tempLogFile
 
-        while ($captureJob.State -eq 'Running') {
-            $output = Receive-Job -Job $captureJob -Keep -ErrorAction SilentlyContinue
+        # Read captured output for parsing
+        $ffmpegOutput = Get-Content -Path $tempLogFile -Raw -ErrorAction SilentlyContinue
+        Remove-Item -Path $tempLogFile -Force -ErrorAction SilentlyContinue
 
-            if ($output) {
-                # Parse progress from ffmpeg stderr output
-                $outputStr = $output | Out-String
-
-                # Look for time= in the output (ffmpeg progress format: time=00:00:05.23)
-                if ($outputStr -match "time=(\d+):(\d+):(\d+)\.?\d*") {
-                    $hours = [int]$matches[1]
-                    $minutes = [int]$matches[2]
-                    $seconds = [int]$matches[3]
-                    $currentTime = $hours * 3600 + $minutes * 60 + $seconds
-
-                    if ($sourceInfo.Duration -gt 0) {
-                        $progress = [Math]::Min(100, [Math]::Round(($currentTime / $sourceInfo.Duration) * 100))
-                        if ($progress -gt $lastProgress) {
-                            $lastProgress = $progress
-                            Write-Host "`r  Progress: $progress%" -NoNewline -ForegroundColor Yellow
-                        }
-                    }
-                }
-            }
-            Start-Sleep -Milliseconds 200
-        }
-
-        # Get final output
-        $ffmpegOutput = Receive-Job -Job $captureJob | Out-String
-        Remove-Job -Job $captureJob -Force
-
-        Write-Host "`r  Progress: 100% - Complete                " -ForegroundColor Green
+        Write-Host ""
 
         # Parse metrics from ffmpeg output
         $vmaf = $null
@@ -259,13 +229,10 @@ function Compare-VideoQuality {
         if (($EnableVMAF -and $null -eq $vmaf) -or ($EnableSSIM -and $null -eq $ssim) -or ($EnablePSNR -and $null -eq $psnr)) {
             $debugFile = Join-Path $ReportDir "debug_ffmpeg_output_$(Get-Date -Format 'yyyy-MM-dd_HH-mm-ss').txt"
             $ffmpegOutput | Out-File -FilePath $debugFile -Encoding UTF8
-            Write-Host ""
             Write-Host "  Warning: Some metrics could not be parsed. Debug output saved to:" -ForegroundColor Yellow
             Write-Host "  $debugFile" -ForegroundColor Gray
+            Write-Host ""
         }
-
-        Write-Host ""
-        Write-Host "  Analysis completed in $([math]::Round($elapsedTime, 1))s" -ForegroundColor Green
 
         return @{
             VMAF = $vmaf
