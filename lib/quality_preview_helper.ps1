@@ -37,17 +37,20 @@ function Test-ConversionQuality {
         $tempDir = Join-Path $env:TEMP "quality_preview_$(Get-Date -Format 'yyyyMMddHHmmss')"
         New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
 
-        $tempSource = Join-Path $tempDir "source.mp4"
+        # Keep source clip in original format, use conversion settings for encoded clip
+        $sourceExtension = [System.IO.Path]::GetExtension($SourcePath)
+        $tempSource = Join-Path $tempDir "source$sourceExtension"
         $tempEncoded = Join-Path $tempDir "encoded.mp4"
 
         Write-Host "  Extracting $TestDuration-second test clip (from $startTime`s)..." -ForegroundColor Yellow -NoNewline
 
-        # Extract test clip from source
+        # Extract test clip from source - keep original codec and container
         $extractArgs = @(
             "-ss", $startTime,
             "-i", $SourcePath,
             "-t", $TestDuration,
-            "-c", "copy",
+            "-c:v", "copy",
+            "-an",  # No audio (avoids codec compatibility issues)
             "-y",
             $tempSource
         )
@@ -60,7 +63,7 @@ function Test-ConversionQuality {
         Write-Host " Done" -ForegroundColor Green
 
         # Build encoding command for test clip
-        Write-Host "  Encoding test clip...\" -ForegroundColor Yellow -NoNewline
+        Write-Host "  Encoding test clip..." -ForegroundColor Yellow -NoNewline
 
         $codecMap = @{
             "AV1" = "av1_nvenc"
@@ -76,15 +79,28 @@ function Test-ConversionQuality {
             "-b:v", $EncodingParams.VideoBitrate,
             "-maxrate", $EncodingParams.MaxRate,
             "-bufsize", $EncodingParams.BufSize,
-            "-c:a", "copy",
+            "-an",  # No audio (test clip has no audio)
             "-y",
             $tempEncoded
         )
 
-        $null = & ffmpeg @testEncodeArgs 2>&1
+        $encodeOutput = & ffmpeg @testEncodeArgs 2>&1 | Out-String
 
         if (-not (Test-Path $tempEncoded)) {
             Write-Host " Failed" -ForegroundColor Red
+
+            # Show relevant error details from ffmpeg output
+            $errorLines = $encodeOutput -split "`n" | Where-Object {
+                $_ -match "(error|failed|invalid|not supported|cannot|unable)" -and
+                $_ -notmatch "deprecated"
+            } | Select-Object -First 3
+
+            if ($errorLines) {
+                foreach ($line in $errorLines) {
+                    Write-Host "  $($line.Trim())" -ForegroundColor Red
+                }
+            }
+
             return $null
         }
         Write-Host " Done" -ForegroundColor Green
