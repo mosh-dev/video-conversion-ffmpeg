@@ -4,7 +4,7 @@ A comprehensive suite of PowerShell-based media processing tools powered by ffmp
 
 ## 🎬 Available Tools
 
-### [Video Tools](./video_tools/)
+### [Video Tools](./video_tools)
 Batch video conversion with GPU acceleration, featuring AV1/HEVC encoding, quality preview, and comprehensive quality analysis.
 
 **Key Features:**
