@@ -87,6 +87,16 @@ function Get-VideoMetadata {
             $FPS = [double]$FPSOutput
         }
 
+        # Get video duration in seconds (always extract, not just when bitrate is missing)
+        $Duration = 0
+        try {
+            $DurationRaw = & ffprobe -v error -show_entries format=duration -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+            $DurationOutput = if ($DurationRaw) { $DurationRaw.Trim().TrimEnd(',') } else { "" }
+            $Duration = if ($DurationOutput) { [double]$DurationOutput } else { 0 }
+        } catch {
+            $Duration = 0
+        }
+
         # Parse bitrate (in bits per second)
         $Bitrate = 0
         $BitrateMethod = "unknown"
@@ -101,36 +111,29 @@ function Get-VideoMetadata {
         }
 
         # If bitrate still not available, calculate from file size and duration
-        if ($Bitrate -eq 0) {
+        if ($Bitrate -eq 0 -and $Duration -gt 0) {
             try {
-                # Get video duration in seconds (handle potential multiple lines)
-                $DurationRaw = & ffprobe -v error -show_entries format=duration -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
-                $DurationOutput = if ($DurationRaw) { $DurationRaw.Trim().TrimEnd(',') } else { "" }
-                $Duration = if ($DurationOutput) { [double]$DurationOutput } else { 0 }
-
                 # Get file size in bytes
                 $FileInfo = Get-Item -LiteralPath $FilePath
                 $FileSizeBytes = $FileInfo.Length
 
                 # Calculate total bitrate from file size and duration
-                if ($Duration -gt 0) {
-                    $TotalBitrate = [int64](($FileSizeBytes * 8) / $Duration)
+                $TotalBitrate = [int64](($FileSizeBytes * 8) / $Duration)
 
-                    # Estimate audio bitrate and subtract it to get video bitrate
-                    # Common audio bitrates: stereo AAC ~128-256kbps, multichannel ~384-640kbps
-                    # Use conservative estimate of 256kbps (256000 bps)
-                    $EstimatedAudioBitrate = 256000
+                # Estimate audio bitrate and subtract it to get video bitrate
+                # Common audio bitrates: stereo AAC ~128-256kbps, multichannel ~384-640kbps
+                # Use conservative estimate of 256kbps (256000 bps)
+                $EstimatedAudioBitrate = 256000
 
-                    # Subtract audio bitrate estimate from total
-                    $Bitrate = $TotalBitrate - $EstimatedAudioBitrate
+                # Subtract audio bitrate estimate from total
+                $Bitrate = $TotalBitrate - $EstimatedAudioBitrate
 
-                    # Ensure bitrate is positive (in case of very small files)
-                    if ($Bitrate -lt 0) {
-                        $Bitrate = [int64]($TotalBitrate * 0.9)  # Use 90% of total as fallback
-                    }
-
-                    $BitrateMethod = "calculated"
+                # Ensure bitrate is positive (in case of very small files)
+                if ($Bitrate -lt 0) {
+                    $Bitrate = [int64]($TotalBitrate * 0.9)  # Use 90% of total as fallback
                 }
+
+                $BitrateMethod = "calculated"
             } catch {
                 # If calculation fails, bitrate remains 0
                 $Bitrate = 0

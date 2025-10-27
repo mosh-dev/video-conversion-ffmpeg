@@ -509,7 +509,6 @@ function Show-ConversionUI {
                             Padding="12,10"
                             Margin="0,0,0,24">
                             <ComboBoxItem Content="Convert all to MP4"/>
-                            <ComboBoxItem Content="Convert all to MKV"/>
                             <ComboBoxItem Content="Preserve original"/>
                         </ComboBox>
 
@@ -748,11 +747,9 @@ public class WindowHelper {
     $presetSlider.Value = $presetNumber
     $presetValue.Text = "p$presetNumber"
 
-    # Set container combo based on preserve flag and output extension
+    # Set container combo based on preserve flag
     if ($PreserveContainer) {
-        $containerCombo.SelectedIndex = 2  # Preserve original
-    } elseif ($OutputExtension -eq ".mkv") {
-        $containerCombo.SelectedIndex = 1  # Convert to MKV
+        $containerCombo.SelectedIndex = 1  # Preserve original
     } else {
         $containerCombo.SelectedIndex = 0  # Convert to MP4 (default)
     }
@@ -772,7 +769,7 @@ public class WindowHelper {
 
     # Function to update audio combo and AAC bitrate visibility
     $UpdateAudioComboState = {
-        if ($containerCombo.SelectedIndex -eq 2) {
+        if ($containerCombo.SelectedIndex -eq 1) {
             # Preserve original container selected - force audio copy and disable combo
             $audioCombo.SelectedIndex = 0
             $audioCombo.IsEnabled = $false
@@ -841,15 +838,14 @@ public class WindowHelper {
         # Determine output extension based on container selection
         $selectedExtension = switch ($containerCombo.SelectedIndex) {
             0 { ".mp4" }     # Convert to MP4
-            1 { ".mkv" }     # Convert to MKV
-            2 { $null }      # Preserve original - extension determined per-file
+            1 { $null }      # Preserve original - extension determined per-file
             default { ".mp4" }
         }
 
         return @{
             Codec = if ($codecCombo.SelectedIndex -eq 0) { "HEVC" } else { "AV1" }
             Preset = "p$([int]$presetSlider.Value)"
-            PreserveContainer = ($containerCombo.SelectedIndex -eq 2)
+            PreserveContainer = ($containerCombo.SelectedIndex -eq 1)
             OutputExtension = $selectedExtension
             BitrateMultiplier = $bitrateSlider.Value / 10.0
             PreserveAudio = ($audioCombo.SelectedIndex -eq 0)

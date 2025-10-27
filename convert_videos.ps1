@@ -222,8 +222,18 @@ foreach ($File in $VideoFiles) {
         $MaxRate = $LimitResult.MaxRate
         $BufSize = $LimitResult.BufSize
 
+        # Format duration as HH:MM:SS
+        $DurationFormatted = "Unknown"
+        if ($Metadata.Duration -and $Metadata.Duration -gt 0) {
+            $VideoDurationSec = [double]$Metadata.Duration
+            $DurHours = [int][Math]::Floor($VideoDurationSec / 3600)
+            $DurMinutes = [int][Math]::Floor(($VideoDurationSec % 3600) / 60)
+            $DurSeconds = [int][Math]::Floor($VideoDurationSec % 60)
+            $DurationFormatted = "{0:D2}:{1:D2}:{2:D2}" -f $DurHours, $DurMinutes, $DurSeconds
+        }
+
         Write-Host "[$CurrentFile/$($VideoFiles.Count)] $($File.Name) ($InputSizeMB MB)" -ForegroundColor Cyan
-        Write-Host "  Resolution: $($Metadata.Resolution) @ $($Metadata.FPS)fps ($SourceBitDepth Bit) | Profile: $ProfileName" -ForegroundColor White
+        Write-Host "  Resolution: $($Metadata.Resolution) @ $($Metadata.FPS)fps ($SourceBitDepth Bit) | Duration: $DurationFormatted | Profile: $ProfileName" -ForegroundColor White
 
         if ($LimitResult.Adjusted) {
             $SourceBitrateStr = ConvertTo-BitrateString -BitsPerSecond $SourceBitrate
