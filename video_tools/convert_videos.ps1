@@ -704,7 +704,7 @@ foreach ($File in $VideoFiles) {
                 "-b:v", $VideoBitrate,
                 # Note: maxrate/bufsize NOT supported in VBR mode for SVT-AV1
                 "-g", "240",           # Keyframe interval
-                "-svtav1-params", "tune=1:enable-restoration=1:enable-cdef=1:enable-qm=1"  # Optimized quality flags
+                "-svtav1-params", "tune=0:enable-restoration=1:enable-cdef=1:enable-qm=1"  # Optimized quality flags
             )
             # Note: Pixel format is set by the format filter, not here
         } elseif ($OutputCodec -eq "HEVC_SVT") {
