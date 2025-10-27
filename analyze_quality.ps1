@@ -446,7 +446,9 @@ foreach ($pair in $matchedPairs) {
     Write-Host "  Compression: ${compressionRatio}x (${spaceSaved}% saved)" -ForegroundColor Gray
     Write-Host "  Resolution: $($sourceInfo.Resolution) -> $($encodedInfo.Resolution)" -ForegroundColor Gray
     Write-Host "  Bitrate: $([math]::Round($sourceInfo.Bitrate / 1000000, 2)) Mbps -> $([math]::Round($encodedInfo.Bitrate / 1000000, 2)) Mbps" -ForegroundColor Gray
-    Write-Host "  Duration: $($sourceInfo.Duration)s" -ForegroundColor Gray
+
+    $TimeStr = "{0:hh\:mm\:ss\.fff}" -f ([TimeSpan]::FromSeconds([double]$sourceInfo.Duration))
+    Write-Host "  Duration: $TimeStr" -ForegroundColor Gray
 
     # Compare quality
     $result = Compare-VideoQuality -SourcePath $pair.Source.FullName -EncodedPath $pair.Encoded.FullName -CurrentIndex $currentComparison -TotalCount $matchedPairs.Count
