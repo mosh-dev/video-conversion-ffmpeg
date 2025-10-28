@@ -120,7 +120,7 @@ function Test-ConversionQuality {
                 $Pass1Args = @(
                     "-y",
                     "-i", $tempSource,
-                    "-map", "0:v:0"
+                    "-map", "0:V:0"  # Map main video only, exclude attached pictures
                 )
 
                 # Add common video parameters
@@ -172,7 +172,7 @@ function Test-ConversionQuality {
                 $Pass2Args = @(
                     "-y",
                     "-i", $tempSource,
-                    "-map", "0:v:0"
+                    "-map", "0:V:0"  # Map main video only, exclude attached pictures
                 )
 
                 # Add common video parameters

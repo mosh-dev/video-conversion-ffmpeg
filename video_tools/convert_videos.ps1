@@ -520,7 +520,7 @@ foreach ($File in $VideoFiles) {
         [System.IO.File]::AppendAllText($LogFile, "  Subtitle Streams: Preserving (container supports subtitles)`n", [System.Text.UTF8Encoding]::new($false))
 
         $FFmpegArgs += @(
-            "-map", "0:v",     # Map video stream
+            "-map", "0:V",     # Map video stream (excluding attached pictures - capital V)
             "-map", "0:a?",    # Map audio streams (optional, ? means don't fail if missing)
             "-map", "0:s?"     # Map subtitle streams (optional)
         )
@@ -677,9 +677,13 @@ foreach ($File in $VideoFiles) {
             "-bufsize", $BufSize,
             "-multipass", "fullres",
             "-tune:v", "hq",
-            "-rc:v", "vbr",
-            "-tier:v", "0"
+            "-rc:v", "vbr"
         )
+
+        # Add tier parameter only for HEVC NVENC (not supported by AV1 NVENC)
+        if ($OutputCodec -eq "HEVC_NVENC") {
+            $CommonVideoParams += @("-tier:v", "0")
+        }
     }
 
     # Execute encoding (2-pass for SVT, single-pass for NVENC)
@@ -735,8 +739,8 @@ foreach ($File in $VideoFiles) {
 
             $Pass1Args = @("-y") + $BaseInputArgs
 
-            # Map only video stream for Pass 1
-            $Pass1Args += @("-map", "0:v:0")
+            # Map only main video stream for Pass 1 (exclude attached pictures)
+            $Pass1Args += @("-map", "0:V:0")
 
             # Add video encoding parameters
             $Pass1Args += $CommonVideoParams
@@ -779,6 +783,10 @@ foreach ($File in $VideoFiles) {
                         Write-Host "    $($line.Trim())" -ForegroundColor Red
                     }
                 }
+
+                # Log full ffmpeg output to file
+                [System.IO.File]::AppendAllText($LogFile, "Pass 1 Error (exit code: $ExitCode)`n", [System.Text.UTF8Encoding]::new($false))
+                [System.IO.File]::AppendAllText($LogFile, "Full ffmpeg output:`n$Pass1Output`n", [System.Text.UTF8Encoding]::new($false))
 
                 throw "Pass 1 encoding failed"
             }
@@ -937,7 +945,15 @@ foreach ($File in $VideoFiles) {
             $SuccessCount++
         } else {
             Write-Host "  Failed (code: $ExitCode)" -ForegroundColor Red
+
+            # Log exit code and full ffmpeg output to file
             [System.IO.File]::AppendAllText($LogFile, "Error: $($File.Name) (ffmpeg exit code: $ExitCode)`n", [System.Text.UTF8Encoding]::new($false))
+
+            # Determine which output to log (Pass 2 or single-pass)
+            $ErrorOutput = if ($IsSoftwareEncoder) { $Pass2Output } else { $FFmpegOutput }
+            if ($ErrorOutput) {
+                [System.IO.File]::AppendAllText($LogFile, "Full ffmpeg output:`n$ErrorOutput`n", [System.Text.UTF8Encoding]::new($false))
+            }
 
             # Clean up temp file on failure
             if (Test-Path -LiteralPath $TempOutputPath) {

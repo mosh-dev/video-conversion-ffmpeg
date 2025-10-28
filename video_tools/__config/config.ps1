@@ -90,7 +90,7 @@ $PresetMap = @{
     1 = @{
         Label = "Fastest"
         NVENC = "p1"          # NVENC: p1 (fastest)
-        SVT_AV1 = "10"        # SVT-AV1: 10 (fastest, 0-13 scale)
+        SVT_AV1 = "12"        # SVT-AV1: 10 (fastest, 0-13 scale)
         x265 = "veryfast"     # x265: veryfast
     }
     # Slider position 2 (Fast)
