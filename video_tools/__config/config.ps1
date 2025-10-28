@@ -156,32 +156,38 @@ $BitrateMultiplier = 0.8
 # Note: MaxRate and BufSize are automatically calculated based on best practices
 # Note: Preset is controlled by the GUI slider and is no longer defined here
 $ParameterMap = @(
-    # 8K 60fps
-    @{ ProfileName = "8K 60fps+"; ResolutionMin = 7680; FPSMin = 50; FPSMax = 999; VideoBitrate = "70M" },
+    # 8K Resolution
+    @{ ProfileName = "8K 90fps+"; ResolutionMin = 7680; FPSMin = 90; FPSMax = 999; VideoBitrate = "110M" },
+    @{ ProfileName = "8K 48-90fps"; ResolutionMin = 7680; FPSMin = 48; FPSMax = 90; VideoBitrate = "85M" },
+    @{ ProfileName = "8K 30-48fps"; ResolutionMin = 7680; FPSMin = 30; FPSMax = 48; VideoBitrate = "65M" },
+    @{ ProfileName = "8K 30fps"; ResolutionMin = 7680; FPSMin = 0; FPSMax = 30; VideoBitrate = "45M" },
 
-    # 8K 30fps
-    @{ ProfileName = "8K 30fps"; ResolutionMin = 7680; FPSMin = 0; FPSMax = 50; VideoBitrate = "50M" },
+    # 4K Resolution
+    @{ ProfileName = "4K 90fps+"; ResolutionMin = 3840; FPSMin = 90; FPSMax = 999; VideoBitrate = "65M" },
+    @{ ProfileName = "4K 48-90fps"; ResolutionMin = 3840; FPSMin = 48; FPSMax = 90; VideoBitrate = "50M" },
+    @{ ProfileName = "4K 30-48fps"; ResolutionMin = 3840; FPSMin = 30; FPSMax = 48; VideoBitrate = "38M" },
+    @{ ProfileName = "4K 30fps"; ResolutionMin = 3840; FPSMin = 0; FPSMax = 30; VideoBitrate = "25M" },
 
-    # 4K 60fps
-    @{ ProfileName = "4K 60fps+"; ResolutionMin = 3840; FPSMin = 50; FPSMax = 999; VideoBitrate = "40M" },
+    # 2.7K/1440p Resolution
+    @{ ProfileName = "2.7K 90fps+"; ResolutionMin = 2560; FPSMin = 90; FPSMax = 999; VideoBitrate = "45M" },
+    @{ ProfileName = "2.7K 48-90fps"; ResolutionMin = 2560; FPSMin = 48; FPSMax = 90; VideoBitrate = "35M" },
+    @{ ProfileName = "2.7K 30-48fps"; ResolutionMin = 2560; FPSMin = 30; FPSMax = 48; VideoBitrate = "25M" },
+    @{ ProfileName = "2.7K 30fps"; ResolutionMin = 2560; FPSMin = 0; FPSMax = 30; VideoBitrate = "15M" },
 
-    # 4K 30fps
-    @{ ProfileName = "4K 30fps"; ResolutionMin = 3840; FPSMin = 0; FPSMax = 50; VideoBitrate = "25M" },
+    # 1080p Resolution
+    @{ ProfileName = "1080p 90fps+"; ResolutionMin = 1920; FPSMin = 90; FPSMax = 999; VideoBitrate = "32M" },
+    @{ ProfileName = "1080p 48-90fps"; ResolutionMin = 1920; FPSMin = 48; FPSMax = 90; VideoBitrate = "25M" },
+    @{ ProfileName = "1080p 30-48fps"; ResolutionMin = 1920; FPSMin = 30; FPSMax = 48; VideoBitrate = "18M" },
+    @{ ProfileName = "1080p 30fps"; ResolutionMin = 1920; FPSMin = 0; FPSMax = 30; VideoBitrate = "10M" },
 
-    # 2.7K/1440p 60fps
-    @{ ProfileName = "2.7K 60fps+"; ResolutionMin = 2560; FPSMin = 50; FPSMax = 999; VideoBitrate = "30M" },
+    # 720p Resolution
+    @{ ProfileName = "720p 90fps+"; ResolutionMin = 1280; FPSMin = 90; FPSMax = 999; VideoBitrate = "16M" },
+    @{ ProfileName = "720p 48-90fps"; ResolutionMin = 1280; FPSMin = 48; FPSMax = 90; VideoBitrate = "13M" },
+    @{ ProfileName = "720p 30-48fps"; ResolutionMin = 1280; FPSMin = 30; FPSMax = 48; VideoBitrate = "9M" },
+    @{ ProfileName = "720p 30fps"; ResolutionMin = 1280; FPSMin = 0; FPSMax = 30; VideoBitrate = "6M" },
 
-    # 2.7K/1440p 30fps
-    @{ ProfileName = "2.7K 30fps"; ResolutionMin = 2560; FPSMin = 0; FPSMax = 50; VideoBitrate = "18M" },
-
-    # 1080p 80fps+
-    @{ ProfileName = "1080p 50fps+"; ResolutionMin = 1920; FPSMin = 50; FPSMax = 999; VideoBitrate = "15M" },
-
-    # 1080p 30fps
-    @{ ProfileName = "1080p 30fps"; ResolutionMin = 1920; FPSMin = 0; FPSMax = 50; VideoBitrate = "10M" },
-
-    # 720p and below
-    @{ ProfileName = "720p or lower"; ResolutionMin = 0; FPSMin = 0; FPSMax = 999; VideoBitrate = "10M" }
+    # Below 720p (SD)
+    @{ ProfileName = "SD or lower"; ResolutionMin = 0; FPSMin = 0; FPSMax = 999; VideoBitrate = "5M" }
 )
 
 # ============================================================================
