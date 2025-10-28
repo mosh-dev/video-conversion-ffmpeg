@@ -303,12 +303,14 @@ function Show-ImageConversionUI {
         <!-- CheckBox Style -->
         <Style x:Key="ModernCheckBox" TargetType="CheckBox">
             <Setter Property="Foreground" Value="$textColor"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="CheckBox">
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="20"/>
+                                <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <Border
@@ -318,29 +320,32 @@ function Show-ImageConversionUI {
                                 Height="20"
                                 Background="$cardBackground"
                                 BorderBrush="$borderColor"
-                                BorderThickness="1"
+                                BorderThickness="2"
                                 CornerRadius="4">
                                 <Path
                                     x:Name="CheckMark"
-                                    Data="M 2,5 L 6,9 L 12,2"
+                                    Data="M 2 8 L 7 13 L 16 4"
                                     Stroke="$accentColor"
                                     StrokeThickness="2"
                                     Visibility="Collapsed"/>
                             </Border>
                             <ContentPresenter
                                 Grid.Column="1"
-                                Margin="8,0,0,0"
-                                VerticalAlignment="Center"/>
+                                VerticalAlignment="Center"
+                                Content="{TemplateBinding Content}"/>
                         </Grid>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
-                            </Trigger>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="CheckBorder" Property="BorderBrush" Value="$accentColor"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
+                                <Trigger Property="IsChecked" Value="True">
+                                    <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
+                                    <Setter TargetName="CheckBorder" Property="Background" Value="$accentColor"/>
+                                    <Setter TargetName="CheckBorder" Property="BorderBrush" Value="$accentColor"/>
+                                    <Setter TargetName="CheckMark" Property="Stroke" Value="White"/>
+                                </Trigger>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="CheckBorder" Property="BorderBrush" Value="$accentColor"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
@@ -554,20 +559,16 @@ function Show-ImageConversionUI {
                             FontSize="14"
                             FontWeight="SemiBold"
                             Foreground="$textColor"
-                            Margin="0,0,0,12"/>
+                            Margin="0,0,0,16"/>
                         <CheckBox
                             x:Name="PreserveMetadataCheck"
                             Style="{StaticResource ModernCheckBox}"
                             Content="Preserve EXIF metadata (camera info, GPS, date, etc.)"
-                            FontFamily="Segoe UI Variable, Segoe UI"
-                            FontSize="13"
-                            Margin="0,0,0,12"/>
+                            Margin="0,0,0,16"/>
                         <CheckBox
                             x:Name="SkipExistingCheck"
                             Style="{StaticResource ModernCheckBox}"
                             Content="Skip existing output files"
-                            FontFamily="Segoe UI Variable, Segoe UI"
-                            FontSize="13"
                             Margin="0,0,0,24"/>
 
                         <!-- Info Box -->
