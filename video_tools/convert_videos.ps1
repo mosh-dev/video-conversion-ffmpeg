@@ -609,7 +609,7 @@ foreach ($File in $VideoFiles) {
     # Map universal preset names to encoder-specific presets
     # Universal: Fastest, Fast, Medium, Slow, Slowest
     # NVENC: p1 (fastest) to p7 (slowest)
-    # SVT-AV1: 10 (fastest) to 3 (slowest) - optimized range [3,4,6,8,10]
+    # SVT-AV1: 10 (fastest) to 3 (slowest) - optimized range [4,5,6,8,10]
     # x265: veryfast to veryslow
     $EncoderPreset = switch ($Preset) {
         "Fastest" {
@@ -638,7 +638,7 @@ foreach ($File in $VideoFiles) {
         }
         "Slow" {
             if ($IsSoftwareEncoder) {
-                if ($OutputCodec -eq "AV1_SVT") { "4" }        # SVT-AV1: Slow
+                if ($OutputCodec -eq "AV1_SVT") { "5" }        # SVT-AV1: Slow
                 else { "slower" }                              # x265: Slow
             } else {
                 "p6"                                           # NVENC: Slow
@@ -646,7 +646,7 @@ foreach ($File in $VideoFiles) {
         }
         "Slowest" {
             if ($IsSoftwareEncoder) {
-                if ($OutputCodec -eq "AV1_SVT") { "3" }        # SVT-AV1: Slowest
+                if ($OutputCodec -eq "AV1_SVT") { "4" }        # SVT-AV1: Slowest
                 else { "veryslow" }                            # x265: Slowest
             } else {
                 "p7"                                           # NVENC: Slowest
@@ -688,7 +688,7 @@ foreach ($File in $VideoFiles) {
 
         if ($OutputCodec -eq "AV1_SVT") {
             # SVT-AV1 uses numeric presets: 0 (slowest/best) to 13 (fastest/lowest quality)
-            # We use optimized range: 3 (slowest), 4, 6, 8, 10 (fastest)
+            # We use optimized range: 4 (slowest), 5, 6, 8, 10 (fastest)
             # Note: SVT-AV1 does NOT support -maxrate/-bufsize in VBR mode (only in CRF mode)
             Write-Host "  SVT-AV1 Preset: $EncoderPreset (2-pass encoding, mapped from $Preset)" -ForegroundColor DarkGray
             [System.IO.File]::AppendAllText($LogFile, "  SVT-AV1 Preset: $EncoderPreset (2-pass encoding, mapped from $Preset)`n", [System.Text.UTF8Encoding]::new($false))

@@ -95,12 +95,12 @@ function Test-ConversionQuality {
                 else { "p5" }
             }
             "Slow" {
-                if ($EncodingParams.Codec -eq "AV1_SVT") { "4" }
+                if ($EncodingParams.Codec -eq "AV1_SVT") { "5" }
                 elseif ($EncodingParams.Codec -eq "HEVC_SVT") { "slower" }
                 else { "p6" }
             }
             "Slowest" {
-                if ($EncodingParams.Codec -eq "AV1_SVT") { "3" }
+                if ($EncodingParams.Codec -eq "AV1_SVT") { "4" }
                 elseif ($EncodingParams.Codec -eq "HEVC_SVT") { "veryslow" }
                 else { "p7" }
             }
@@ -161,18 +161,21 @@ function Test-ConversionQuality {
                 }
 
                 # Pass 1 outputs to NUL
-                $Pass1Args += @("-loglevel", "error", "-an", "-sn", "-f", "null", "NUL")
+                $Pass1Args += @("-loglevel", "info", "-stats", "-an", "-sn", "-f", "null", "NUL")
 
-                # Execute Pass 1
-                $null = & ffmpeg @Pass1Args 2>&1
+                Write-Host ""  # New line for progress display
+
+                # Execute Pass 1 with filtered real-time progress display
+                $Pass1Output = Invoke-FFmpegWithProgress -Arguments $Pass1Args
                 $exitCode1 = $LASTEXITCODE
 
+                Write-Host "  Pass 1/2: " -NoNewline -ForegroundColor Yellow
                 if ($exitCode1 -ne 0) {
-                    Write-Host " Failed" -ForegroundColor Red
+                    Write-Host "Failed" -ForegroundColor Red
                     Set-Location -Path $OriginalWorkingDir
                     return $null
                 }
-                Write-Host " Done" -ForegroundColor Green
+                Write-Host "Complete" -ForegroundColor Green
 
                 # ===== PASS 2 =====
                 Write-Host "  Pass 2/2: Encoding..." -ForegroundColor Yellow -NoNewline
@@ -210,10 +213,12 @@ function Test-ConversionQuality {
                 }
 
                 # Pass 2 outputs to file
-                $Pass2Args += @("-loglevel", "error", "-an", "-f", "mp4", $tempEncoded)
+                $Pass2Args += @("-loglevel", "info", "-stats", "-an", "-f", "mp4", $tempEncoded)
 
-                # Execute Pass 2
-                $encodeOutput = & ffmpeg @Pass2Args 2>&1 | Out-String
+                Write-Host ""  # New line for progress display
+
+                # Execute Pass 2 with filtered real-time progress display
+                $Pass2Output = Invoke-FFmpegWithProgress -Arguments $Pass2Args
                 $exitCode2 = $LASTEXITCODE
 
                 # Clean up pass log files
@@ -232,11 +237,12 @@ function Test-ConversionQuality {
                 # Restore working directory
                 Set-Location -Path $OriginalWorkingDir
 
+                Write-Host "  Pass 2/2: " -NoNewline -ForegroundColor Yellow
                 if ($exitCode2 -ne 0) {
-                    Write-Host " Failed" -ForegroundColor Red
+                    Write-Host "Failed" -ForegroundColor Red
 
                     # Show relevant error details
-                    $errorLines = $encodeOutput -split "`n" | Where-Object {
+                    $errorLines = $Pass2Output -split "`n" | Where-Object {
                         $_ -match "(error|failed|invalid|not supported|cannot|unable)" -and
                         $_ -notmatch "deprecated"
                     } | Select-Object -First 3
@@ -249,7 +255,7 @@ function Test-ConversionQuality {
 
                     return $null
                 }
-                Write-Host " Done" -ForegroundColor Green
+                Write-Host "Complete" -ForegroundColor Green
 
             } catch {
                 # Restore working directory on error
