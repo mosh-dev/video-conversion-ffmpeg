@@ -8,6 +8,19 @@
 # Invalid mappings will be validated on script startup.
 
 # ============================================================================
+# ENCODER TO BASE CODEC MAPPING
+# ============================================================================
+# Maps encoder selection (e.g., "AV1_NVENC", "HEVC_SVT") to base codec name
+# for container compatibility checks (e.g., "av1", "hevc")
+
+$EncoderToBaseCodecMap = @{
+    "AV1_NVENC"   = "av1"
+    "HEVC_NVENC"  = "hevc"
+    "AV1_SVT"     = "av1"
+    "HEVC_SVT"    = "hevc"
+}
+
+# ============================================================================
 # CONTAINER/CODEC SUPPORT MATRIX
 # ============================================================================
 

@@ -188,8 +188,8 @@ $ParameterMap = @(
 # INTERNAL MAPPINGS (DO NOT MODIFY)
 # ============================================================================
 
-# Codec Mapping - Maps user-friendly codec names to ffmpeg encoder names
-$CodecMap = @{
+# Encoder Mapping - Maps encoder choices to ffmpeg encoder names
+$EncoderMap = @{
     "AV1_NVENC"   = "av1_nvenc"     # NVIDIA hardware encoder
     "HEVC_NVENC"  = "hevc_nvenc"    # NVIDIA hardware encoder
     "AV1_SVT"     = "libsvtav1"     # SVT-AV1 software encoder
@@ -203,4 +203,4 @@ $AudioCodecMap = @{
 }
 
 # Set the actual codec to use
-$DefaultVideoCodec = $CodecMap[$OutputCodec]
+$DefaultVideoCodec = $EncoderMap[$OutputCodec]

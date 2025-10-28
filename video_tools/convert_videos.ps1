@@ -51,7 +51,7 @@ if ($uiResult.Cancelled) {
 
 # Apply selected values
 $OutputCodec = $uiResult.Codec
-$DefaultVideoCodec = $CodecMap[$OutputCodec]
+$DefaultVideoCodec = $EncoderMap[$OutputCodec]
 $OutputBitDepth = $uiResult.BitDepth
 $PreserveContainer = $uiResult.PreserveContainer
 $PreserveAudio = $uiResult.PreserveAudio
@@ -246,8 +246,16 @@ foreach ($File in $VideoFiles) {
 
     # Check codec compatibility with container format (when preserving container)
     if ($PreserveContainer) {
-        if (-not (Test-CodecContainerCompatibility -Container $FileExtension -Codec $OutputCodec)) {
-            $reason = Get-SkipReason -Container $FileExtension -Codec $OutputCodec
+        # Map encoder choice to base codec name (e.g., "AV1_NVENC" -> "av1")
+        $BaseCodec = if ($EncoderToBaseCodecMap.ContainsKey($OutputCodec)) {
+            $EncoderToBaseCodecMap[$OutputCodec]
+        } else {
+            # Fallback for unknown encoders - use lowercase first part before underscore
+            ($OutputCodec -split '_')[0].ToLower()
+        }
+
+        if (-not (Test-CodecContainerCompatibility -Container $FileExtension -Codec $BaseCodec)) {
+            $reason = Get-SkipReason -Container $FileExtension -Codec $BaseCodec
             Write-Host "[$CurrentFile/$($VideoFiles.Count)] Skipped: $($File.Name)" -ForegroundColor Yellow
             Write-Host "  Reason: $reason" -ForegroundColor Red
             [System.IO.File]::AppendAllText($LogFile, "Skipped: $($File.Name) - $reason`n", [System.Text.UTF8Encoding]::new($false))
