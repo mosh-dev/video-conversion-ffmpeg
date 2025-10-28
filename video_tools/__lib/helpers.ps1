@@ -132,7 +132,6 @@ function Get-VideoMetadata {
     param([string]$FilePath)
 
     try {
-        Write-Host "File Information - $FilePath"
         # Get bit depth from ffprobe
         $SourceBitDepth = Get-VideoBitDepth $FilePath
 
