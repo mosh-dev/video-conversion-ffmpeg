@@ -382,7 +382,7 @@ function Show-QualityAnalyzerUI {
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="1 (slowest)" FontSize="11" Foreground="$secondaryTextColor" HorizontalAlignment="Left"/>
-                            <TextBlock Grid.Column="1" Text="100" FontSize="11" Foreground="$secondaryTextColor" HorizontalAlignment="Center"/>
+                            <TextBlock Grid.Column="1" Text="250" FontSize="11" Foreground="$secondaryTextColor" HorizontalAlignment="Center"/>
                             <TextBlock Grid.Column="2" Text="500 (fastest)" FontSize="11" Foreground="$secondaryTextColor" HorizontalAlignment="Right"/>
                         </Grid>
 
