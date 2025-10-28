@@ -12,23 +12,21 @@ function Get-VideoBitDepth {
 
     # 1️⃣ Try direct bit depth field (bits_per_raw_sample)
     $BitDepthRaw = ffprobe @ffprobeCommonArgs -show_entries stream=bits_per_raw_sample "$FilePath" 2>$null
-    $BitDepthRaw = $BitDepthRaw.Trim()
-
+    $BitDepthRaw = if ($null -ne $BitDepthRaw) { $BitDepthRaw.Trim() } else { "" }
     if ([int]::TryParse($BitDepthRaw, [ref]$null) -and [int]$BitDepthRaw -gt 0) {
         return [int]$BitDepthRaw
     }
 
     # 2️⃣ Try bits_per_component (alternative field)
     $BitDepthComp = ffprobe @ffprobeCommonArgs -show_entries stream=bits_per_component "$FilePath" 2>$null
-    $BitDepthComp = $BitDepthComp.Trim()
-
+    $BitDepthComp = if ($null -ne $BitDepthComp) { $BitDepthComp.Trim() } else { "" }
     if ([int]::TryParse($BitDepthComp, [ref]$null) -and [int]$BitDepthComp -gt 0) {
         return [int]$BitDepthComp
     }
 
     # 3️⃣ Parse pixel format (comprehensive coverage)
     $PixFmt = ffprobe @ffprobeCommonArgs -show_entries stream=pix_fmt "$FilePath" 2>$null
-    $PixFmt = $PixFmt.Trim().ToLower()
+    $PixFmt = if ($null -ne $PixFmt) { $PixFmt.Trim().ToLower() } else { "" }
 
     if ($PixFmt -and $PixFmt -ne "unknown" -and $PixFmt -ne "") {
         switch -Regex ($PixFmt) {
@@ -134,7 +132,7 @@ function Get-VideoMetadata {
     param([string]$FilePath)
 
     try {
-
+        Write-Host "File Information - $FilePath"
         # Get bit depth from ffprobe
         $SourceBitDepth = Get-VideoBitDepth $FilePath
 
