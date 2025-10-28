@@ -24,7 +24,7 @@ Video conversion workspace for batch converting videos to AV1/HEVC using ffmpeg 
 
 5. **Dynamic Parameters**: Two-stage matching - resolution tier, then FPS range. Applies `$BitrateModifier`.
 
-6. **Audio Compatibility**: Detects codec via ffprobe, auto re-encodes incompatible codecs (WMA, Vorbis, DTS, PCM variants). Falls back to AAC for MP4/MOV.
+6. **Audio Compatibility**: Detects ALL audio streams via ffprobe (not just first). Auto re-encodes incompatible codecs (WMA, Vorbis, DTS, PCM variants, unknown/undecodable codecs). When incompatible audio detected, maps only first decodable stream (`-map 0:a:0`) to prevent ffmpeg decode errors. Falls back to AAC for MP4/MOV.
 
 7. **Container Validation**: Blocks incompatible combinations (e.g., AVI+AV1, WebM+HEVC, MOV+AV1). See `codec_mappings.ps1`.
 
@@ -33,6 +33,8 @@ Video conversion workspace for batch converting videos to AV1/HEVC using ffmpeg 
 9. **Path Handling**: Uses `-LiteralPath` for `[]` brackets, `Join-Path` for construction, UTF-8 without BOM.
 
 10. **MKV Handling**: `-map 0`, `-fflags +genpts`, `-ignore_unknown` to preserve all streams.
+
+11. **UI Combobox Order** (show_conversion_ui.ps1): Codec dropdown order: AV1_NVENC (index 0), AV1_SVT (index 1), HEVC_NVENC (index 2), HEVC_SVT (index 3). Bit depth order: source (index 0), 8bit (index 1), 10bit (index 2). Index mapping logic at lines 765-780 (loading defaults) and 889-904 (reading selection).
 
 ## Critical Implementation Notes
 

@@ -364,20 +364,38 @@ foreach ($File in $VideoFiles) {
         $AudioBitrate = $null
         $AudioSampleRate = $null
 
-        # Detect actual audio codec from source file using ffprobe
+        # Detect ALL audio codecs from source file using ffprobe (not just first stream)
         try {
-            $AudioCodecRaw = & ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of csv=p=0 $InputPath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
-            $SourceAudioCodec = if ($AudioCodecRaw) { $AudioCodecRaw.Trim().ToLower() } else { $null }
+            $AudioCodecsRaw = & ffprobe -v error -select_streams a -show_entries stream=codec_name -of csv=p=0 $InputPath 2>$null | Where-Object { $_.Trim() -ne "" }
+            $AllAudioCodecs = @()
+            foreach ($codec in $AudioCodecsRaw) {
+                $trimmed = $codec.Trim().ToLower()
+                if ($trimmed) {
+                    $AllAudioCodecs += $trimmed
+                }
+            }
         } catch {
-            $SourceAudioCodec = $null
+            $AllAudioCodecs = @()
         }
 
-        # Check audio/container compatibility using mapping
+        # Check audio/container compatibility for ALL audio streams
         $NeedsReencoding = $false
-        if ($SourceAudioCodec) {
+        $IncompatibleCodecs = @()
+
+        foreach ($SourceAudioCodec in $AllAudioCodecs) {
+            # Check for unknown/unsupported codecs (ffmpeg reports as "none")
+            if ($SourceAudioCodec -eq "none") {
+                Write-Host "  Note: Unknown audio codec detected (stream will be re-encoded)" -ForegroundColor Yellow
+                $NeedsReencoding = $true
+                $IncompatibleCodecs += "unknown"
+                continue
+            }
+
+            # Check container compatibility
             if (-not (Test-AudioContainerCompatibility -Container $FileExtension -AudioCodec $SourceAudioCodec)) {
                 Write-Host "  Note: Re-encoding audio ($($SourceAudioCodec.ToUpper()) codec not compatible with $($FileExtension.ToUpper()) container)" -ForegroundColor Yellow
                 $NeedsReencoding = $true
+                $IncompatibleCodecs += $SourceAudioCodec
             }
         }
 
@@ -391,7 +409,20 @@ foreach ($File in $VideoFiles) {
             }
             $AudioBitrate = "${SelectedAACBitrate}k"
             $AudioSampleRate = Get-AACSampleRate -InputPath $InputPath
-            [System.IO.File]::AppendAllText($LogFile, "  Audio: Re-encoding $($SourceAudioCodec.ToUpper()) (incompatible with $($FileExtension.ToUpper())) -> $AudioCodecToUse @ $AudioBitrate @ $($AudioSampleRate)Hz`n", [System.Text.UTF8Encoding]::new($false))
+
+            $IncompatibleList = ($IncompatibleCodecs | Select-Object -Unique) -join ", "
+            [System.IO.File]::AppendAllText($LogFile, "  Audio: Re-encoding incompatible audio streams ($($IncompatibleList.ToUpper())) -> $AudioCodecToUse @ $AudioBitrate @ $($AudioSampleRate)Hz`n", [System.Text.UTF8Encoding]::new($false))
+        }
+
+        # Determine which audio streams to map
+        # If re-encoding due to incompatible/unknown codecs, only map the first audio stream
+        # (ffmpeg cannot decode unknown codecs even when re-encoding)
+        if ($NeedsReencoding) {
+            $AudioStreamMap = "0:a:0"  # Map only first audio stream
+            Write-Host "  Note: Mapping only first audio stream (others are undecodable)" -ForegroundColor Yellow
+            [System.IO.File]::AppendAllText($LogFile, "  Note: Mapping only first audio stream due to undecodable streams`n", [System.Text.UTF8Encoding]::new($false))
+        } else {
+            $AudioStreamMap = "0:a?"   # Map all audio streams
         }
     } else {
         $AudioCodecToUse = $AudioCodecMap[$AudioCodec.ToLower()]
@@ -402,6 +433,7 @@ foreach ($File in $VideoFiles) {
         }
         $AudioBitrate = "${SelectedAACBitrate}k"
         $AudioSampleRate = Get-AACSampleRate -InputPath $InputPath
+        $AudioStreamMap = "0:a?"  # Map all audio streams when explicitly re-encoding
     }
 
     # ============================================================================
@@ -528,9 +560,9 @@ foreach ($File in $VideoFiles) {
         [System.IO.File]::AppendAllText($LogFile, "  Subtitle Streams: Preserving (container supports subtitles)`n", [System.Text.UTF8Encoding]::new($false))
 
         $FFmpegArgs += @(
-            "-map", "0:V",     # Map video stream (excluding attached pictures - capital V)
-            "-map", "0:a?",    # Map audio streams (optional, ? means don't fail if missing)
-            "-map", "0:s?"     # Map subtitle streams (optional)
+            "-map", "0:V",             # Map video stream (excluding attached pictures - capital V)
+            "-map", $AudioStreamMap,    # Map audio streams (dynamic: all or first only)
+            "-map", "0:s?"              # Map subtitle streams (optional)
         )
 
         # For MKV, add additional stream handling

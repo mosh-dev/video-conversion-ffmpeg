@@ -14,7 +14,7 @@ A powerful batch video conversion tool with GPU acceleration, featuring an inter
 - **Smart Parameter Selection**: Automatically adjusts encoding parameters based on resolution and framerate
 - **Bitrate Control**: Fine-tune output quality with an adjustable bitrate slider (0.1x to 3.0x)
 - **Intelligent Bitrate Limiting**: Never exceeds source video bitrate to avoid quality loss
-- **Audio Compatibility Handling**: Automatically detects and re-encodes incompatible audio codecs (WMA, Vorbis, DTS, etc.) for target containers
+- **Audio Compatibility Handling**: Automatically detects and re-encodes incompatible audio codecs (WMA, Vorbis, DTS, unknown/undecodable codecs, etc.) across all audio streams for target containers
 - **Batch Processing**: Convert multiple videos with a single command
 - **Comprehensive Logging**: Timestamped logs with detailed conversion statistics
 - **Resume Support**: Automatically skips already-converted files
@@ -63,8 +63,17 @@ A powerful batch video conversion tool with GPU acceleration, featuring an inter
 When you run the script, a GUI window appears with the following options:
 
 #### Video Codec
-- **HEVC (H.265)**: Better compatibility, works on most modern GPUs
-- **AV1**: Best compression, smallest file sizes, requires RTX 40+ series
+Dropdown order (optimized for best compression first):
+1. **AV1 NVENC**: Best compression, smallest file sizes, requires RTX 40+ series (hardware-accelerated)
+2. **AV1 SVT**: Software encoding, works on all CPUs (slower, better compression than HEVC)
+3. **HEVC NVENC**: Excellent compression, works on GTX 10+ GPUs (hardware-accelerated)
+4. **HEVC SVT (x265)**: Software encoding, works on all CPUs (slower, high quality)
+
+#### Output Bit Depth
+Dropdown order (recommended option first):
+1. **Same as source**: Automatically matches input video bit depth (recommended)
+2. **8-bit**: Standard compatibility, smaller files, works on all devices
+3. **10-bit**: Enhanced gradients and HDR support, slightly larger files
 
 #### Encoding Preset
 - Slider from **1 (Fastest) to 5 (Slowest)** - Universal preset scale
@@ -546,8 +555,15 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 - **Vorbis audio**: Re-encoded for MP4/MOV containers
 - **DTS audio**: Re-encoded for MP4/MOV containers
 - **PCM audio** (pcm_s16le, pcm_s24le, pcm_s32le): Re-encoded for MP4/MOV containers
+- **Unknown/undecodable codecs** (e.g., Apple ALAC "apac"): Maps only first decodable audio stream, skips undecodable streams
 
-**Note**: The script uses ffprobe to detect the actual audio codec, not just file extension, ensuring accurate compatibility checking.
+**Multi-Stream Audio Handling**:
+- The script detects **ALL** audio streams in the source video (not just the first one)
+- When incompatible or unknown codecs are found in any stream, only the first decodable stream is mapped
+- This prevents ffmpeg decode errors while preserving the primary audio track
+- Example: iPhone videos with multiple audio streams (AAC + Apple Lossless) are handled gracefully
+
+**Note**: The script uses ffprobe to detect the actual audio codec in all streams, not just file extension, ensuring accurate compatibility checking.
 
 ### Large File Sizes
 **Problem**: Output files are larger than expected

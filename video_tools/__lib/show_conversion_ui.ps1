@@ -438,10 +438,10 @@ function Show-ConversionUI {
                             FontSize="13"
                             Padding="12,10"
                             Margin="0,0,0,24">
-                            <ComboBoxItem Content="HEVC NVENC - Hardware (GTX 10+ series)"/>
                             <ComboBoxItem Content="AV1 NVENC - Hardware (RTX 40+ series)"/>
-                            <ComboBoxItem Content="HEVC SVT (x265) - Software (slower, all CPUs)"/>
                             <ComboBoxItem Content="AV1 SVT - Software (slower, all CPUs)"/>
+                            <ComboBoxItem Content="HEVC NVENC - Hardware (GTX 10+ series)"/>
+                            <ComboBoxItem Content="HEVC SVT (x265) - Software (slower, all CPUs)"/>
                         </ComboBox>
 
                         <!-- Bit Depth -->
@@ -459,9 +459,9 @@ function Show-ConversionUI {
                             FontSize="13"
                             Padding="12,10"
                             Margin="0,0,0,24">
+                            <ComboBoxItem Content="Same as source (recommended)"/>
                             <ComboBoxItem Content="8-bit - Standard (smaller files, wider compatibility)"/>
                             <ComboBoxItem Content="10-bit - Enhanced (better gradients, HDR support)"/>
-                            <ComboBoxItem Content="Same as source (recommended)"/>
                         </ComboBox>
 
                         <!-- Preset Slider -->
@@ -762,21 +762,21 @@ public class WindowHelper {
     })
 
     # Set default values
-    # Map codec selection to dropdown index (0=HEVC_NVENC, 1=AV1_NVENC, 2=HEVC_SVT, 3=AV1_SVT)
+    # Map codec selection to dropdown index (0=AV1_NVENC, 1=AV1_SVT, 2=HEVC_NVENC, 3=HEVC_SVT)
     $codecCombo.SelectedIndex = switch ($OutputCodec) {
-        "HEVC_NVENC" { 0 }
-        "AV1_NVENC"  { 1 }
-        "HEVC_SVT"   { 2 }
-        "AV1_SVT"    { 3 }
-        default      { 1 }  # Default to AV1_NVENC
+        "AV1_NVENC"  { 0 }
+        "AV1_SVT"    { 1 }
+        "HEVC_NVENC" { 2 }
+        "HEVC_SVT"   { 3 }
+        default      { 0 }  # Default to AV1_NVENC
     }
 
-    # Set default bit depth selection (0=8bit, 1=10bit, 2=source)
+    # Set default bit depth selection (0=source, 1=8bit, 2=10bit)
     $bitDepthCombo.SelectedIndex = switch ($OutputBitDepth) {
-        "8bit"   { 0 }
-        "10bit"  { 1 }
-        "source" { 2 }
-        default  { 2 }  # Default to "Same as source"
+        "source" { 0 }
+        "8bit"   { 1 }
+        "10bit"  { 2 }
+        default  { 0 }  # Default to "Same as source"
     }
 
     # Use numeric DefaultPreset directly (1-5)
@@ -886,20 +886,20 @@ public class WindowHelper {
             default { ".mp4" }
         }
 
-        # Map codec selection index to codec name (0=HEVC_NVENC, 1=AV1_NVENC, 2=HEVC_SVT, 3=AV1_SVT)
+        # Map codec selection index to codec name (0=AV1_NVENC, 1=AV1_SVT, 2=HEVC_NVENC, 3=HEVC_SVT)
         $selectedCodec = switch ($codecCombo.SelectedIndex) {
-            0 { "HEVC_NVENC" }
-            1 { "AV1_NVENC" }
-            2 { "HEVC_SVT" }
-            3 { "AV1_SVT" }
+            0 { "AV1_NVENC" }
+            1 { "AV1_SVT" }
+            2 { "HEVC_NVENC" }
+            3 { "HEVC_SVT" }
             default { "AV1_NVENC" }
         }
 
-        # Map bit depth selection index to bit depth string (0=8bit, 1=10bit, 2=source)
+        # Map bit depth selection index to bit depth string (0=source, 1=8bit, 2=10bit)
         $selectedBitDepth = switch ($bitDepthCombo.SelectedIndex) {
-            0 { "8bit" }
-            1 { "10bit" }
-            2 { "source" }
+            0 { "source" }
+            1 { "8bit" }
+            2 { "10bit" }
             default { "source" }
         }
 
