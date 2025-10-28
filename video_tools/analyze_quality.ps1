@@ -537,9 +537,24 @@ foreach ($pair in $matchedPairs) {
 # ============================================================================
 
 if ($reportData.Count -gt 0) {
-    # Export to JSON (force array output even for single item)
-    # Wrap in @() to ensure array output in PowerShell 5.1
-    @($reportData) | ConvertTo-Json -Depth 10 | Out-File -FilePath $ReportFile -Encoding UTF8
+    # Export to JSON - always write as array for consistency (even with single item)
+    # Check if ConvertTo-Json has -AsArray parameter (PowerShell 7.2+)
+    $jsonParams = @{ Depth = 10 }
+    if ((Get-Command ConvertTo-Json).Parameters.ContainsKey('AsArray')) {
+        $jsonParams['AsArray'] = $true
+        $reportData | ConvertTo-Json @jsonParams | Out-File -FilePath $ReportFile -Encoding UTF8
+    } else {
+        # PowerShell 5.1 fallback: manually ensure array format
+        # ConvertTo-Json doesn't serialize single-element arrays as arrays in PS 5.1
+        # So we always wrap in an array structure
+        if ($reportData.Count -eq 1) {
+            # Force array serialization by wrapping in array
+            "[$((ConvertTo-Json -InputObject $reportData[0] -Depth 10))]" | Out-File -FilePath $ReportFile -Encoding UTF8
+        } else {
+            # Multiple items - ConvertTo-Json will serialize as array
+            $reportData | ConvertTo-Json -Depth 10 | Out-File -FilePath $ReportFile -Encoding UTF8
+        }
+    }
 
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "  SUMMARY" -ForegroundColor Cyan

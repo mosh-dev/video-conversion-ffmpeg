@@ -810,15 +810,28 @@ foreach ($File in $VideoFiles) {
             }
 
             # Pass 1 outputs to NUL (no audio, no subtitles)
-            $Pass1Args += @("-an", "-sn", "-f", "null", "NUL")
+            # Add -stats for real-time progress display and -loglevel info for better visibility
+            $Pass1Args += @("-loglevel", "info", "-stats", "-an", "-sn", "-f", "null", "NUL")
 
             # Log Pass 1 command
             $Pass1Command = "ffmpeg " + ($Pass1Args -join " ")
             [System.IO.File]::AppendAllText($LogFile, "Pass 1 Command: $Pass1Command`n", [System.Text.UTF8Encoding]::new($false))
 
-            # Execute Pass 1 (capture output for error reporting)
-            $Pass1Output = & ffmpeg @Pass1Args 2>&1 | Out-String
+            # Execute Pass 1 with filtered real-time progress display
+            $Pass1Output = & ffmpeg @Pass1Args 2>&1 | ForEach-Object {
+                $line = $_.ToString()
+
+                # Only show progress lines (frame=... fps=... etc.)
+                if ($line -match "^frame=") {
+                    Write-Host "`r  $line" -NoNewline -ForegroundColor Cyan
+                }
+
+                $line
+            } | Out-String
             $ExitCode = $LASTEXITCODE
+
+            # Move to new line after progress display
+            Write-Host ""
 
             if ($ExitCode -ne 0) {
                 Write-Host "  Pass 1 failed (code: $ExitCode)" -ForegroundColor Red
@@ -881,15 +894,27 @@ foreach ($File in $VideoFiles) {
 
             # Add common flags and output
             $OutputFormat = Get-FFmpegFormat -Container $FileExtension
-            $Pass2Args += @("-loglevel", "error", "-stats", "-f", $OutputFormat, $TempOutputPath)
+            $Pass2Args += @("-loglevel", "info", "-stats", "-f", $OutputFormat, $TempOutputPath)
 
             # Log Pass 2 command
             $Pass2Command = "ffmpeg " + ($Pass2Args -join " ")
             [System.IO.File]::AppendAllText($LogFile, "Pass 2 Command: $Pass2Command`n", [System.Text.UTF8Encoding]::new($false))
 
-            # Execute Pass 2
-            & ffmpeg @Pass2Args
+            # Execute Pass 2 with filtered real-time progress display
+            $Pass2Output = & ffmpeg @Pass2Args 2>&1 | ForEach-Object {
+                $line = $_.ToString()
+
+                # Only show progress lines (frame=... fps=... etc.)
+                if ($line -match "^frame=") {
+                    Write-Host "`r  $line" -NoNewline -ForegroundColor Cyan
+                }
+
+                $line
+            } | Out-String
             $ExitCode = $LASTEXITCODE
+
+            # Move to new line after progress display
+            Write-Host ""
 
             # Clean up all pass log files from temp directory
             Get-ChildItem -Path $TempDir -Filter "ffmpeg2pass_$($BaseFileName)*" -File -ErrorAction SilentlyContinue |
@@ -935,7 +960,7 @@ foreach ($File in $VideoFiles) {
 
             # Add common flags and output
             $OutputFormat = Get-FFmpegFormat -Container $FileExtension
-            $FFmpegArgs += @("-loglevel", "error", "-stats", "-f", $OutputFormat, $TempOutputPath)
+            $FFmpegArgs += @("-loglevel", "info", "-stats", "-f", $OutputFormat, $TempOutputPath)
 
             # Always allow overwrite
             $FFmpegArgs = @("-y") + $FFmpegArgs
@@ -944,9 +969,21 @@ foreach ($File in $VideoFiles) {
             $FFmpegCommand = "ffmpeg " + ($FFmpegArgs -join " ")
             [System.IO.File]::AppendAllText($LogFile, "Command: $FFmpegCommand`n", [System.Text.UTF8Encoding]::new($false))
 
-            # Execute ffmpeg
-            & ffmpeg @FFmpegArgs
+            # Execute ffmpeg with filtered real-time progress display
+            $FFmpegOutput = & ffmpeg @FFmpegArgs 2>&1 | ForEach-Object {
+                $line = $_.ToString()
+
+                # Only show progress lines (frame=... fps=... etc.)
+                if ($line -match "^frame=") {
+                    Write-Host "`r  $line" -NoNewline -ForegroundColor Cyan
+                }
+
+                $line
+            } | Out-String
             $ExitCode = $LASTEXITCODE
+
+            # Clear the progress line
+            Write-Host "`r" -NoNewline
 
             # Restore original working directory (for NVENC which doesn't change it)
             if ($IsSoftwareEncoder) {

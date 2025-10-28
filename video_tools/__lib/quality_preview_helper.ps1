@@ -117,6 +117,8 @@ function Test-ConversionQuality {
                 "-c:v", $ffmpegCodec,
                 "-preset", $encoderPreset,
                 "-b:v", $EncodingParams.VideoBitrate,
+                "-loglevel", "info",
+                "-stats",
                 "-an",  # No audio (test clip has no audio)
                 "-y",
                 $tempEncoded
@@ -132,6 +134,8 @@ function Test-ConversionQuality {
                     "-b:v", $EncodingParams.VideoBitrate,
                     "-maxrate", $EncodingParams.MaxRate,
                     "-bufsize", $EncodingParams.BufSize,
+                    "-loglevel", "info",
+                    "-stats",
                     "-an",
                     "-y",
                     $tempEncoded
@@ -146,13 +150,29 @@ function Test-ConversionQuality {
                 "-b:v", $EncodingParams.VideoBitrate,
                 "-maxrate", $EncodingParams.MaxRate,
                 "-bufsize", $EncodingParams.BufSize,
+                "-loglevel", "info",
+                "-stats",
                 "-an",  # No audio (test clip has no audio)
                 "-y",
                 $tempEncoded
             )
         }
 
-        $encodeOutput = & ffmpeg @testEncodeArgs 2>&1 | Out-String
+        Write-Host ""  # New line for progress display
+        $encodeOutput = & ffmpeg @testEncodeArgs 2>&1 | ForEach-Object {
+            $line = $_.ToString()
+
+            # Only show progress lines (frame=... fps=... etc.)
+            if ($line -match "^frame=") {
+                Write-Host "`r  $line" -NoNewline -ForegroundColor Cyan
+            }
+
+            $line
+        } | Out-String
+
+        # Move to new line and show completion message
+        Write-Host ""
+        Write-Host "  Encoding test clip..." -NoNewline -ForegroundColor Yellow
 
         if (-not (Test-Path $tempEncoded)) {
             Write-Host " Failed" -ForegroundColor Red
@@ -180,11 +200,27 @@ function Test-ConversionQuality {
             "-i", $tempSource,
             "-i", $tempEncoded,
             "-lavfi", "[1:v][0:v]libvmaf=n_subsample=$VMAF_Subsample",
+            "-loglevel", "info",
+            "-stats",
             "-f", "null",
             "-"
         )
 
-        $vmafOutput = & ffmpeg @vmafArgs 2>&1 | Out-String
+        Write-Host ""  # New line for progress display
+        $vmafOutput = & ffmpeg @vmafArgs 2>&1 | ForEach-Object {
+            $line = $_.ToString()
+
+            # Only show progress lines (frame=... fps=... etc.)
+            if ($line -match "^frame=") {
+                Write-Host "`r  $line" -NoNewline -ForegroundColor Cyan
+            }
+
+            $line
+        } | Out-String
+
+        # Move to new line and show completion message
+        Write-Host ""
+        Write-Host "  Running VMAF analysis..." -NoNewline -ForegroundColor Yellow
 
         # Parse VMAF score
         $vmafScore = $null

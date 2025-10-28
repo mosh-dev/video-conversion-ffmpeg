@@ -20,15 +20,8 @@ $QualityColors = @{
 function Show-FormattedReport {
     param([string]$JsonPath)
 
-    # Read JSON file
-    $reportDataRaw = Get-Content -Path $JsonPath -Encoding UTF8 -Raw | ConvertFrom-Json
-
-    # Ensure reportData is always an array (handle single object or array)
-    if ($reportDataRaw -is [array]) {
-        $reportData = $reportDataRaw
-    } else {
-        $reportData = @($reportDataRaw)
-    }
+    # Read JSON file (always expects array format)
+    $reportData = Get-Content -Path $JsonPath -Encoding UTF8 -Raw | ConvertFrom-Json
 
     if ($reportData.Count -eq 0) {
         Write-Host "`nNo data found in report." -ForegroundColor Yellow
@@ -231,15 +224,8 @@ if ($jsonFiles.Count -eq 1) {
             Write-Host "`nExiting...`n" -ForegroundColor Gray
             exit 0
         } elseif ($action -eq 'E' -or $action -eq 'e') {
-            # Export to text file
-            $reportDataRaw = Get-Content -Path $selectedFile.FullName -Encoding UTF8 -Raw | ConvertFrom-Json
-
-            # Ensure reportData is always an array (handle single object or array)
-            if ($reportDataRaw -is [array]) {
-                $reportData = $reportDataRaw
-            } else {
-                $reportData = @($reportDataRaw)
-            }
+            # Export to text file (expects array format)
+            $reportData = Get-Content -Path $selectedFile.FullName -Encoding UTF8 -Raw | ConvertFrom-Json
 
             $exportPath = Join-Path $ReportDir "$([System.IO.Path]::GetFileNameWithoutExtension($selectedFile.Name)).txt"
 
@@ -368,15 +354,8 @@ while ($true) {
         & $PSCommandPath
         exit 0
     } elseif ($action -eq 'E' -or $action -eq 'e') {
-        # Export to text file
-        $reportDataRaw = Get-Content -Path $selectedFile.FullName -Encoding UTF8 -Raw | ConvertFrom-Json
-
-        # Ensure reportData is always an array (handle single object or array)
-        if ($reportDataRaw -is [array]) {
-            $reportData = $reportDataRaw
-        } else {
-            $reportData = @($reportDataRaw)
-        }
+        # Export to text file (expects array format)
+        $reportData = Get-Content -Path $selectedFile.FullName -Encoding UTF8 -Raw | ConvertFrom-Json
 
         $exportPath = Join-Path $ReportDir "$([System.IO.Path]::GetFileNameWithoutExtension($selectedFile.Name)).txt"
 
