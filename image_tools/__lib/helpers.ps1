@@ -1,0 +1,278 @@
+# ============================================================================
+# IMAGE CONVERSION HELPER FUNCTIONS
+# ============================================================================
+# Utility functions for logging, file operations, and conversion support
+
+# ============================================================================
+# LOGGING FUNCTIONS
+# ============================================================================
+
+function Write-Log {
+    param(
+        [string]$Message,
+        [string]$LogFile,
+        [string]$Color = "White"
+    )
+
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $logMessage = "[$timestamp] $Message"
+
+    # Write to console
+    Write-Host $logMessage -ForegroundColor $Color
+
+    # Write to log file (UTF-8 without BOM)
+    if ($LogFile) {
+        try {
+            $logText = "$logMessage`n"
+            [System.IO.File]::AppendAllText($LogFile, $logText, [System.Text.UTF8Encoding]::new($false))
+        } catch {
+            Write-Host "[WARNING] Failed to write to log file: $_" -ForegroundColor Yellow
+        }
+    }
+}
+
+function Write-LogSection {
+    param(
+        [string]$Title,
+        [string]$LogFile
+    )
+
+    $separator = "=" * 80
+    Write-Log -Message $separator -LogFile $LogFile -Color "Cyan"
+    Write-Log -Message $Title -LogFile $LogFile -Color "Cyan"
+    Write-Log -Message $separator -LogFile $LogFile -Color "Cyan"
+}
+
+# ============================================================================
+# FILE OPERATIONS
+# ============================================================================
+
+function Get-SafeOutputPath {
+    param(
+        [string]$InputPath,
+        [string]$OutputDir,
+        [string]$OutputExtension
+    )
+
+    $baseName = [System.IO.Path]::GetFileNameWithoutExtension($InputPath)
+    $outputPath = Join-Path $OutputDir "$baseName$OutputExtension"
+
+    # Handle collision detection (if output file already exists with same name)
+    if (Test-Path -LiteralPath $outputPath) {
+        $sourceExt = [System.IO.Path]::GetExtension($InputPath).TrimStart('.')
+        $newBaseName = "${baseName}_${sourceExt}"
+        $outputPath = Join-Path $OutputDir "$newBaseName$OutputExtension"
+    }
+
+    return $outputPath
+}
+
+function Format-FileSize {
+    param([long]$Bytes)
+
+    if ($Bytes -ge 1GB) {
+        return "{0:N2} GB" -f ($Bytes / 1GB)
+    } elseif ($Bytes -ge 1MB) {
+        return "{0:N2} MB" -f ($Bytes / 1MB)
+    } elseif ($Bytes -ge 1KB) {
+        return "{0:N2} KB" -f ($Bytes / 1KB)
+    } else {
+        return "$Bytes bytes"
+    }
+}
+
+function Get-ImageDimensions {
+    param([string]$ImagePath)
+
+    try {
+        # Use ffprobe to get image dimensions
+        $ffprobeOutput = & ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 $ImagePath 2>&1
+
+        if ($ffprobeOutput -match '(\d+)x(\d+)') {
+            return @{
+                Width = [int]$matches[1]
+                Height = [int]$matches[2]
+            }
+        }
+    } catch {
+        Write-Host "[WARNING] Failed to detect image dimensions: $_" -ForegroundColor Yellow
+    }
+
+    return $null
+}
+
+function Get-ImageBitDepth {
+    param([string]$ImagePath)
+
+    try {
+        # Use ffprobe to get bit depth
+        $ffprobeOutput = & ffprobe -v error -select_streams v:0 -show_entries stream=bits_per_raw_sample -of default=noprint_wrappers=1:nokey=1 $ImagePath 2>&1
+
+        if ($ffprobeOutput -match '^\d+$') {
+            $bitDepth = [int]$ffprobeOutput
+            # Return 8 or 10 (default to 8 if unusual value)
+            if ($bitDepth -gt 8) {
+                return 10
+            } else {
+                return 8
+            }
+        }
+    } catch {
+        # Default to 8-bit if detection fails
+        return 8
+    }
+
+    return 8
+}
+
+# ============================================================================
+# CONVERSION STATISTICS
+# ============================================================================
+
+function Show-ConversionStats {
+    param(
+        [int]$TotalFiles,
+        [int]$SuccessCount,
+        [int]$SkipCount,
+        [int]$FailCount,
+        [long]$OriginalSize,
+        [long]$ConvertedSize,
+        [timespan]$Duration,
+        [string]$LogFile
+    )
+
+    Write-LogSection -Title "CONVERSION SUMMARY" -LogFile $LogFile
+
+    Write-Log -Message "Total files processed: $TotalFiles" -LogFile $LogFile -Color "White"
+    Write-Log -Message "Successfully converted: $SuccessCount" -LogFile $LogFile -Color "Green"
+
+    if ($SkipCount -gt 0) {
+        Write-Log -Message "Skipped (already exist): $SkipCount" -LogFile $LogFile -Color "Yellow"
+    }
+
+    if ($FailCount -gt 0) {
+        Write-Log -Message "Failed: $FailCount" -LogFile $LogFile -Color "Red"
+    }
+
+    if ($OriginalSize -gt 0 -and $ConvertedSize -gt 0) {
+        $originalSizeStr = Format-FileSize -Bytes $OriginalSize
+        $convertedSizeStr = Format-FileSize -Bytes $ConvertedSize
+        $compressionRatio = [math]::Round(($ConvertedSize / $OriginalSize) * 100, 1)
+        $spaceSaved = $OriginalSize - $ConvertedSize
+        $spaceSavedStr = Format-FileSize -Bytes $spaceSaved
+
+        Write-Log -Message "" -LogFile $LogFile
+        Write-Log -Message "Original size:  $originalSizeStr" -LogFile $LogFile -Color "White"
+        Write-Log -Message "Converted size: $convertedSizeStr" -LogFile $LogFile -Color "White"
+        Write-Log -Message "Compression:    $compressionRatio% of original" -LogFile $LogFile -Color "Cyan"
+        Write-Log -Message "Space saved:    $spaceSavedStr" -LogFile $LogFile -Color "Green"
+    }
+
+    $durationStr = "{0:hh\:mm\:ss}" -f $Duration
+    Write-Log -Message "" -LogFile $LogFile
+    Write-Log -Message "Total time: $durationStr" -LogFile $LogFile -Color "White"
+
+    Write-Log -Message "=" * 80 -LogFile $LogFile -Color "Cyan"
+}
+
+# ============================================================================
+# VALIDATION FUNCTIONS
+# ============================================================================
+
+function Test-FFmpegAvailable {
+    try {
+        $null = & ffmpeg -version 2>&1
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+function Test-HEICEncodingSupport {
+    try {
+        # Check if libx265 encoder is available
+        $encoders = & ffmpeg -encoders 2>&1 | Out-String
+        return $encoders -match 'libx265'
+    } catch {
+        return $false
+    }
+}
+
+# ============================================================================
+# QUALITY ANALYSIS FUNCTIONS
+# ============================================================================
+
+function Measure-ImageQuality {
+    param(
+        [string]$SourceImage,
+        [string]$ConvertedImage,
+        [string]$LogFile
+    )
+
+    try {
+        # Use ffmpeg to calculate SSIM and PSNR
+        # We treat images as single-frame videos for quality analysis
+        Write-Log -Message "  Analyzing quality..." -LogFile $LogFile -Color "Cyan"
+
+        # Calculate SSIM (Structural Similarity Index)
+        $ssimOutput = & ffmpeg -i $ConvertedImage -i $SourceImage -lavfi "ssim=stats_file=-" -f null - 2>&1 | Out-String
+        $ssim = $null
+        if ($ssimOutput -match 'All:(\d+\.\d+)') {
+            $ssim = [double]$matches[1]
+        }
+
+        # Calculate PSNR (Peak Signal-to-Noise Ratio)
+        $psnrOutput = & ffmpeg -i $ConvertedImage -i $SourceImage -lavfi "psnr=stats_file=-" -f null - 2>&1 | Out-String
+        $psnr = $null
+        if ($psnrOutput -match 'average:(\d+\.\d+)') {
+            $psnr = [double]$matches[1]
+        }
+
+        return @{
+            SSIM = $ssim
+            PSNR = $psnr
+            Success = ($ssim -ne $null -and $psnr -ne $null)
+        }
+    } catch {
+        Write-Log -Message "  [WARNING] Quality analysis failed: $_" -LogFile $LogFile -Color "Yellow"
+        return @{
+            SSIM = $null
+            PSNR = $null
+            Success = $false
+        }
+    }
+}
+
+function Save-QualityReport {
+    param(
+        [string]$ReportFile,
+        [hashtable]$ConversionData,
+        [string]$LogFile
+    )
+
+    try {
+        $report = @{
+            Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+            SourceFile = $ConversionData.SourceFile
+            OutputFile = $ConversionData.OutputFile
+            SourceSize = $ConversionData.SourceSize
+            OutputSize = $ConversionData.OutputSize
+            CompressionRatio = $ConversionData.CompressionRatio
+            Quality = $ConversionData.Quality
+            ChromaSubsampling = $ConversionData.ChromaSubsampling
+            BitDepth = $ConversionData.BitDepth
+            OutputFormat = $ConversionData.OutputFormat
+            Metrics = @{
+                SSIM = $ConversionData.SSIM
+                PSNR = $ConversionData.PSNR
+            }
+        }
+
+        $json = $report | ConvertTo-Json -Depth 10
+        [System.IO.File]::WriteAllText($ReportFile, $json, [System.Text.UTF8Encoding]::new($false))
+
+        Write-Log -Message "  Quality report saved: $ReportFile" -LogFile $LogFile -Color "DarkGray"
+    } catch {
+        Write-Log -Message "  [WARNING] Failed to save quality report: $_" -LogFile $LogFile -Color "Yellow"
+    }
+}
