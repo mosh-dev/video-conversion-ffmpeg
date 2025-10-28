@@ -48,7 +48,7 @@ A powerful batch video conversion tool with GPU acceleration, featuring an inter
    ```
 3. **Configure settings** in the GUI:
    - Select codec (AV1 or HEVC)
-   - Choose encoding preset (p1-p7)
+   - Choose encoding preset (1-5 slider: 1=Fastest, 5=Slowest/best quality)
    - Choose a container format
    - Adjust video bitrate multiplier
    - Configure audio encoding
@@ -67,12 +67,12 @@ When you run the script, a GUI window appears with the following options:
 - **AV1**: Best compression, smallest file sizes, requires RTX 40+ series
 
 #### Encoding Preset
-- Slider from **p1 (fastest) to p7 (slowest, best quality)**
-- **p1**: Fastest encoding, lower compression efficiency
-- **p4**: Balanced speed and quality
-- **p6-p7**: Slowest encoding, best compression and quality (recommended for final encodes)
+- Slider from **1 (Fastest) to 5 (Slowest)** - Universal preset scale
+- **Position 1 (Fastest)**: NVENC=p1, SVT-AV1=10, x265=veryfast - Fast encoding, lower compression
+- **Position 3 (Medium)**: NVENC=p5, SVT-AV1=6, x265=medium - Balanced speed and quality
+- **Position 5 (Slowest)**: NVENC=p7, SVT-AV1=4, x265=veryslow - Best compression and quality (recommended for final encodes)
 - Higher presets take longer but produce smaller files with better quality
-- This setting overrides the preset values in `$ParameterMap` from config.ps1
+- Preset mapping is centralized in `$PresetMap` (config.ps1) for easy customization
 
 #### Container Format
 - **Convert all to MP4**: Converts all videos to MP4 format (universal compatibility, supports both AV1 and HEVC)
@@ -144,16 +144,23 @@ $SkipExistingFiles = $true        # Skip already-converted files
 $FileExtensions = @("*.mp4", "*.mov", "*.mkv", "*.wmv", "*.avi", "*.ts", "*.m2ts", "*.m4v", "*.flv", "*.3gp", "*.divx", "*.webm")
 
 # Default Codec (can be changed in GUI)
-$OutputCodec = "AV1"               # "AV1" or "HEVC"
+$OutputCodec = "AV1_NVENC"         # "AV1_NVENC", "HEVC_NVENC", "AV1_SVT", or "HEVC_SVT"
 
 # Encoding Preset (can be changed in GUI)
-$DefaultPreset = "p6"              # "p1" to "p7" (p1=fastest, p7=slowest/best)
+$DefaultPreset = 5                 # 1-5 slider (1=Fastest, 5=Slowest/best quality)
+
+# Preset Mapping - Centralized encoder-specific presets
+$PresetMap = @{
+    1 = @{ Label = "Fastest"; NVENC = "p1"; SVT_AV1 = "10"; x265 = "veryfast" }
+    5 = @{ Label = "Slowest"; NVENC = "p7"; SVT_AV1 = "4"; x265 = "veryslow" }
+    # ... (see config.ps1 for full mapping)
+}
 
 # Quality Preview (10-second VMAF test before each conversion)
 $EnableQualityPreview = $true      # Enable/disable quality preview
 $PreviewDuration = 10              # Duration of test clip in seconds
 $PreviewStartPosition = "middle"   # "middle" or number of seconds from start
-$VMAF_Subsample = 100              # VMAF subsample (1-500, lower=more accurate but slower)
+$VMAF_Subsample = 30               # VMAF subsample (1-500, default 30, lower=more accurate but slower)
 
 # Audio Settings
 $AudioCodec = "aac"                # "opus" or "aac"
@@ -186,8 +193,8 @@ The script automatically selects encoding parameters based on video resolution a
 
 **Note**:
 - All bitrates are adjusted by the **Video Bitrate Multiplier** you set in the GUI
-- The **Encoding Preset** (p1-p7) is now controlled by the GUI slider and applies to all videos
-- Preset values in `$ParameterMap` (config.ps1) are no longer used; the GUI setting takes precedence
+- The **Encoding Preset** (1-5 slider) is controlled by the GUI and applies to all videos
+- Preset mapping in `$PresetMap` (config.ps1) can be customized to change encoder-specific values
 
 ## Directory Structure
 

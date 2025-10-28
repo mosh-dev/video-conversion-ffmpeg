@@ -77,37 +77,26 @@ function Test-ConversionQuality {
         # Determine if using software encoder
         $isSoftwareEncoder = ($EncodingParams.Codec -eq "AV1_SVT" -or $EncodingParams.Codec -eq "HEVC_SVT")
 
-        # Map universal preset to encoder-specific preset (match main script mapping)
-        $encoderPreset = switch ($EncodingParams.Preset) {
-            "Fastest" {
-                if ($EncodingParams.Codec -eq "AV1_SVT") { "10" }
-                elseif ($EncodingParams.Codec -eq "HEVC_SVT") { "veryfast" }
-                else { "p1" }
+        # Map universal preset to encoder-specific preset using centralized PresetMap
+        # Convert preset name to slider position (1-5)
+        $presetSliderPosition = switch ($EncodingParams.Preset) {
+            "Fastest" { 1 }
+            "Fast"    { 2 }
+            "Medium"  { 3 }
+            "Slow"    { 4 }
+            "Slowest" { 5 }
+            default   { 5 }  # Default to slowest for safety
+        }
+
+        # Get encoder-specific preset from PresetMap
+        $encoderPreset = if ($isSoftwareEncoder) {
+            if ($EncodingParams.Codec -eq "AV1_SVT") {
+                $PresetMap[$presetSliderPosition].SVT_AV1
+            } else {
+                $PresetMap[$presetSliderPosition].x265
             }
-            "Fast" {
-                if ($EncodingParams.Codec -eq "AV1_SVT") { "8" }
-                elseif ($EncodingParams.Codec -eq "HEVC_SVT") { "fast" }
-                else { "p3" }
-            }
-            "Medium" {
-                if ($EncodingParams.Codec -eq "AV1_SVT") { "6" }
-                elseif ($EncodingParams.Codec -eq "HEVC_SVT") { "medium" }
-                else { "p5" }
-            }
-            "Slow" {
-                if ($EncodingParams.Codec -eq "AV1_SVT") { "5" }
-                elseif ($EncodingParams.Codec -eq "HEVC_SVT") { "slower" }
-                else { "p6" }
-            }
-            "Slowest" {
-                if ($EncodingParams.Codec -eq "AV1_SVT") { "4" }
-                elseif ($EncodingParams.Codec -eq "HEVC_SVT") { "veryslow" }
-                else { "p7" }
-            }
-            default {
-                # Try to use as-is (for legacy p1-p7 format)
-                $EncodingParams.Preset
-            }
+        } else {
+            $PresetMap[$presetSliderPosition].NVENC
         }
 
         # Build encoding arguments

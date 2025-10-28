@@ -357,7 +357,7 @@ function Show-QualityAnalyzerUI {
                             <TextBlock
                                 x:Name="SubsampleValue"
                                 Grid.Column="1"
-                                Text="100"
+                                Text="30"
                                 FontFamily="Segoe UI Variable, Segoe UI"
                                 FontSize="16"
                                 FontWeight="Bold"
@@ -370,7 +370,7 @@ function Show-QualityAnalyzerUI {
                             Style="{StaticResource ModernSlider}"
                             Minimum="1"
                             Maximum="500"
-                            Value="100"
+                            Value="30"
                             TickFrequency="1"
                             IsSnapToTickEnabled="True"
                             Margin="0,0,0,8"/>

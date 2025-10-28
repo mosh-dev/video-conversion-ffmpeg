@@ -10,40 +10,122 @@ function Get-VideoBitDepth {
     # Suppress ffprobe output except what we need
     $ffprobeCommonArgs = '-v', 'error', '-select_streams', 'v:0', '-of', 'default=nw=1:nk=1'
 
-    # 1️⃣ Try direct bit depth field
+    # 1️⃣ Try direct bit depth field (bits_per_raw_sample)
     $BitDepthRaw = ffprobe @ffprobeCommonArgs -show_entries stream=bits_per_raw_sample "$FilePath" 2>$null
     $BitDepthRaw = $BitDepthRaw.Trim()
 
-    if ([int]::TryParse($BitDepthRaw, [ref]$null)) {
+    if ([int]::TryParse($BitDepthRaw, [ref]$null) -and [int]$BitDepthRaw -gt 0) {
         return [int]$BitDepthRaw
     }
 
-    # 2️⃣ Check pixel format
+    # 2️⃣ Try bits_per_component (alternative field)
+    $BitDepthComp = ffprobe @ffprobeCommonArgs -show_entries stream=bits_per_component "$FilePath" 2>$null
+    $BitDepthComp = $BitDepthComp.Trim()
+
+    if ([int]::TryParse($BitDepthComp, [ref]$null) -and [int]$BitDepthComp -gt 0) {
+        return [int]$BitDepthComp
+    }
+
+    # 3️⃣ Parse pixel format (comprehensive coverage)
     $PixFmt = ffprobe @ffprobeCommonArgs -show_entries stream=pix_fmt "$FilePath" 2>$null
     $PixFmt = $PixFmt.Trim().ToLower()
 
-    if ($PixFmt -match '10(le|be)?$' -or $PixFmt -match 'p010|yuv420p10|yuv422p10|yuv444p10') {
-        return 10
-    }
-    elseif ($PixFmt -match '12(le|be)?$' -or $PixFmt -match 'p012|yuv420p12|yuv422p12|yuv444p12') {
-        return 12
-    }
-    elseif ($PixFmt -match '16(le|be)?$' -or $PixFmt -match 'p016|yuv420p16|yuv422p16|yuv444p16') {
-        return 16
+    if ($PixFmt -and $PixFmt -ne "unknown" -and $PixFmt -ne "") {
+        switch -Regex ($PixFmt) {
+            # 16-bit formats
+            '16(le|be)?$|^(p016|yuv420p16|yuv422p16|yuv444p16|yuva420p16|yuva422p16|yuva444p16|gbrp16|gbrap16|gray16|rgb48|rgba64|bgr48|bgra64)' {
+                return 16
+            }
+            # 14-bit formats (rare but exists)
+            '14(le|be)?$|^(yuv420p14|yuv422p14|yuv444p14|gbrp14)' {
+                return 14
+            }
+            # 12-bit formats
+            '12(le|be)?$|^(p012|yuv420p12|yuv422p12|yuv444p12|yuva420p12|yuva422p12|yuva444p12|gbrp12|gbrap12|gray12)' {
+                return 12
+            }
+            # 10-bit formats (most common HDR)
+            '10(le|be)?$|^(p010|yuv420p10|yuv422p10|yuv444p10|yuva420p10|yuva422p10|yuva444p10|gbrp10|gbrap10|gray10|x2rgb10|x2bgr10)' {
+                return 10
+            }
+            # 9-bit formats (rare)
+            '9(le|be)?$|^(yuv420p9|yuv422p9|yuv444p9|gbrp9)' {
+                return 9
+            }
+            # 8-bit formats (most common SDR)
+            '^(yuv420p|yuv422p|yuv444p|yuvj420p|yuvj422p|yuvj444p|nv12|nv21|yuva420p|yuva422p|yuva444p|rgb24|bgr24|rgba|bgra|argb|abgr|gbrp|gbrap|gray|uyvy422|yuyv422|rgb8|bgr8)' {
+                return 8
+            }
+        }
     }
 
-    # 3️⃣ Fallback: infer from codec name
+    # 4️⃣ Try codec profile detection for more accurate results
+    $CodecProfile = ffprobe @ffprobeCommonArgs -show_entries stream=profile "$FilePath" 2>$null
+    $CodecProfile = $CodecProfile.Trim().ToLower()
+
+    if ($CodecProfile -and $CodecProfile -ne "unknown" -and $CodecProfile -ne "") {
+        # HEVC/H.265 profiles
+        if ($CodecProfile -match 'main 10' -or $CodecProfile -match 'main10') {
+            return 10
+        }
+        elseif ($CodecProfile -match 'main 12') {
+            return 12
+        }
+        # AV1 profiles (profile 0=8-bit, profile 1=10-bit, profile 2=12-bit)
+        elseif ($CodecProfile -match 'profile 1|high') {
+            return 10
+        }
+        elseif ($CodecProfile -match 'profile 2|professional') {
+            return 12
+        }
+        # VP9 profiles (profile 0/1=8-bit, profile 2/3=10/12-bit)
+        elseif ($CodecProfile -match 'profile [23]') {
+            return 10
+        }
+        # H.264 High 10 Profile
+        elseif ($CodecProfile -match 'high 10') {
+            return 10
+        }
+        elseif ($CodecProfile -match 'high 4:2:2') {
+            return 10
+        }
+        elseif ($CodecProfile -match 'high 4:4:4') {
+            return 10
+        }
+    }
+
+    # 5️⃣ Conservative codec-based inference (last resort)
     $CodecName = ffprobe @ffprobeCommonArgs -show_entries stream=codec_name "$FilePath" 2>$null
     $CodecName = $CodecName.Trim().ToLower()
 
-    switch -regex ($CodecName) {
-        'prores'   { return 10 }  # All ProRes variants are 10-bit
-        'dnxhr'    { return 10 }  # DNxHR HQ, HQX often 10-bit
-        'hevc'     { return 10 }  # Many HEVC sources are 10-bit, but not guaranteed
-        'av1'      { return 10 }  # AV1 10-bit common for HDR
-        'vp9'      { return 10 }  # VP9 Profile 2 often 10-bit
-        default    { return 8 }   # safe fallback
+    if ($CodecName -and $CodecName -ne "unknown" -and $CodecName -ne "") {
+        switch -regex ($CodecName) {
+            # Professional codecs (guaranteed 10-bit+)
+            'prores'    { return 10 }  # ProRes 422/422HQ/4444 are 10-bit
+            'dnxhd'     { return 10 }  # DNxHD high-quality variants
+            'dnxhr'     { return 10 }  # DNxHR HQ/HQX/444
+            'cfhd'      { return 10 }  # Cineform
+
+            # Default to 8-bit for consumer codecs (more accurate than assuming 10-bit)
+            'h264|avc'  { return 8 }   # H.264 is usually 8-bit unless profile indicates otherwise
+            'hevc|h265' { return 8 }   # HEVC is usually 8-bit unless profile indicates otherwise
+            'av1'       { return 8 }   # AV1 is usually 8-bit unless profile indicates otherwise
+            'vp9'       { return 8 }   # VP9 is usually 8-bit unless profile indicates otherwise
+            'vp8'       { return 8 }   # VP8 is always 8-bit
+            'mpeg2'     { return 8 }   # MPEG-2 is 8-bit
+            'mpeg4'     { return 8 }   # MPEG-4 is 8-bit
+            'mjpeg'     { return 8 }   # Motion JPEG is 8-bit
+            'msmpeg4'   { return 8 }   # Microsoft MPEG-4 is 8-bit
+            'wmv'       { return 8 }   # Windows Media Video is 8-bit
+            'theora'    { return 8 }   # Theora is 8-bit
+
+            # Safe fallback
+            default     { return 10 }
+        }
     }
+
+    # 6️⃣ Final fallback if all detection methods fail
+    return 10
 }
 
 
@@ -57,42 +139,42 @@ function Get-VideoMetadata {
         $SourceBitDepth = Get-VideoBitDepth $FilePath
 
         # Get resolution (TS/M2TS files may return multiple lines, so take first non-empty line)
-        $WidthRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $WidthRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 $FilePath 2>$null | Where-Object { $_ -and $_.Trim() -ne "" } | Select-Object -First 1
         $WidthOutput = if ($WidthRaw) { $WidthRaw.Trim().TrimEnd(',') } else { "" }
 
-        $HeightRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $HeightRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 $FilePath 2>$null | Where-Object { $_ -and $_.Trim() -ne "" } | Select-Object -First 1
         $HeightOutput = if ($HeightRaw) { $HeightRaw.Trim().TrimEnd(',') } else { "" }
 
-        $FPSRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $FPSRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_ -and $_.Trim() -ne "" } | Select-Object -First 1
         $FPSOutput = if ($FPSRaw) { $FPSRaw.Trim().TrimEnd(',') } else { "" }
 
         # Get additional video metadata
-        $VideoCodecRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $VideoCodecRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of csv=p=0 $FilePath 2>$null | Where-Object { $_ -and $_.Trim() -ne "" } | Select-Object -First 1
         $VideoCodecOutput = if ($VideoCodecRaw) { $VideoCodecRaw.Trim().TrimEnd(',') } else { "" }
 
-        $PixelFormatRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=pix_fmt -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $PixelFormatRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=pix_fmt -of csv=p=0 $FilePath 2>$null | Where-Object { $_ -and $_.Trim() -ne "" } | Select-Object -First 1
         $PixelFormatOutput = if ($PixelFormatRaw) { $PixelFormatRaw.Trim().TrimEnd(',') } else { "" }
 
         # Get color information (multiple fields for better detection)
-        $ColorSpaceRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=color_space -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $ColorSpaceRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=color_space -of csv=p=0 $FilePath 2>$null | Where-Object { $_ -and $_.Trim() -ne "" } | Select-Object -First 1
         $ColorSpaceOutput = if ($ColorSpaceRaw) { $ColorSpaceRaw.Trim().TrimEnd(',') } else { "" }
 
-        $ColorPrimariesRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=color_primaries -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $ColorPrimariesRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=color_primaries -of csv=p=0 $FilePath 2>$null | Where-Object { $_ -and $_.Trim() -ne "" } | Select-Object -First 1
         $ColorPrimariesOutput = if ($ColorPrimariesRaw) { $ColorPrimariesRaw.Trim().TrimEnd(',') } else { "" }
 
-        $ColorTransferRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=color_transfer -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $ColorTransferRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=color_transfer -of csv=p=0 $FilePath 2>$null | Where-Object { $_ -and $_.Trim() -ne "" } | Select-Object -First 1
         $ColorTransferOutput = if ($ColorTransferRaw) { $ColorTransferRaw.Trim().TrimEnd(',') } else { "" }
 
-        $ColorRangeRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=color_range -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $ColorRangeRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=color_range -of csv=p=0 $FilePath 2>$null | Where-Object { $_ -and $_.Trim() -ne "" } | Select-Object -First 1
         $ColorRangeOutput = if ($ColorRangeRaw) { $ColorRangeRaw.Trim().TrimEnd(',') } else { "" }
 
         # Try to get bitrate from video stream first (TS/M2TS files may return multiple lines)
-        $BitrateRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=bit_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $BitrateRaw = & ffprobe -v error -select_streams v:0 -show_entries stream=bit_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_ -and $_.Trim() -ne "" } | Select-Object -First 1
         $BitrateOutput = if ($BitrateRaw) { $BitrateRaw.Trim().TrimEnd(',') } else { "" }
 
         # If stream bitrate is N/A or empty, try format bitrate (common for MKV, TS, M2TS files)
         if (-not $BitrateOutput -or $BitrateOutput -eq "N/A" -or $BitrateOutput -eq "") {
-            $BitrateFormatRaw = & ffprobe -v error -show_entries format=bit_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+            $BitrateFormatRaw = & ffprobe -v error -show_entries format=bit_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_ -and $_.Trim() -ne "" } | Select-Object -First 1
             $BitrateOutput = if ($BitrateFormatRaw) { $BitrateFormatRaw.Trim().TrimEnd(',') } else { "" }
         }
 
@@ -108,23 +190,23 @@ function Get-VideoMetadata {
         }
 
         # Get audio stream metadata
-        $AudioCodecRaw = & ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $AudioCodecRaw = & ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of csv=p=0 $FilePath 2>$null | Where-Object { $_ -and $_.Trim() -ne "" } | Select-Object -First 1
         $AudioCodecOutput = if ($AudioCodecRaw) { $AudioCodecRaw.Trim().TrimEnd(',') } else { "" }
 
-        $AudioBitrateRaw = & ffprobe -v error -select_streams a:0 -show_entries stream=bit_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $AudioBitrateRaw = & ffprobe -v error -select_streams a:0 -show_entries stream=bit_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_ -and $_.Trim() -ne "" } | Select-Object -First 1
         $AudioBitrateOutput = if ($AudioBitrateRaw) { $AudioBitrateRaw.Trim().TrimEnd(',') } else { "" }
 
-        $AudioChannelsRaw = & ffprobe -v error -select_streams a:0 -show_entries stream=channels -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $AudioChannelsRaw = & ffprobe -v error -select_streams a:0 -show_entries stream=channels -of csv=p=0 $FilePath 2>$null | Where-Object { $_ -and $_.Trim() -ne "" } | Select-Object -First 1
         $AudioChannelsOutput = if ($AudioChannelsRaw) { $AudioChannelsRaw.Trim().TrimEnd(',') } else { "" }
 
-        $AudioSampleRateRaw = & ffprobe -v error -select_streams a:0 -show_entries stream=sample_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $AudioSampleRateRaw = & ffprobe -v error -select_streams a:0 -show_entries stream=sample_rate -of csv=p=0 $FilePath 2>$null | Where-Object { $_ -and $_.Trim() -ne "" } | Select-Object -First 1
         $AudioSampleRateOutput = if ($AudioSampleRateRaw) { $AudioSampleRateRaw.Trim().TrimEnd(',') } else { "" }
 
         # Get format metadata
-        $DurationRaw = & ffprobe -v error -show_entries format=duration -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $DurationRaw = & ffprobe -v error -show_entries format=duration -of csv=p=0 $FilePath 2>$null | Where-Object { $_ -and $_.Trim() -ne "" } | Select-Object -First 1
         $DurationOutput = if ($DurationRaw) { $DurationRaw.Trim().TrimEnd(',') } else { "" }
 
-        $FormatNameRaw = & ffprobe -v error -show_entries format=format_name -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $FormatNameRaw = & ffprobe -v error -show-entries format=format_name -of csv=p=0 $FilePath 2>$null | Where-Object { $_ -and $_.Trim() -ne "" } | Select-Object -First 1
         $FormatNameOutput = if ($FormatNameRaw) { $FormatNameRaw.Trim().TrimEnd(',') } else { "" }
 
         # Get video duration in seconds
@@ -499,7 +581,7 @@ function Get-VideoRotation {
 
     try {
         # Get rotation from stream side data
-        $RotationRaw = & ffprobe -v error -select_streams v:0 -show_entries stream_side_data=rotation -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $RotationRaw = & ffprobe -v error -select_streams v:0 -show_entries stream_side_data=rotation -of csv=p=0 $FilePath 2>$null | Where-Object { $_ -and $_.Trim() -ne "" } | Select-Object -First 1
 
         if ($RotationRaw) {
             $Rotation = [int]$RotationRaw.Trim()
@@ -507,7 +589,7 @@ function Get-VideoRotation {
         }
 
         # Alternative: Check for rotation tag in stream metadata
-        $RotationTagRaw = & ffprobe -v error -select_streams v:0 -show_entries stream_tags=rotate -of csv=p=0 $FilePath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $RotationTagRaw = & ffprobe -v error -select_streams v:0 -show_entries stream_tags=rotate -of csv=p=0 $FilePath 2>$null | Where-Object { $_ -and $_.Trim() -ne "" } | Select-Object -First 1
 
         if ($RotationTagRaw) {
             $Rotation = [int]$RotationTagRaw.Trim()
@@ -529,7 +611,7 @@ function Get-AACSampleRate {
 
     try {
         # Get source audio sample rate using ffprobe
-        $SampleRateRaw = & ffprobe -v error -select_streams a:0 -show_entries stream=sample_rate -of csv=p=0 $InputPath 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
+        $SampleRateRaw = & ffprobe -v error -select_streams a:0 -show_entries stream=sample_rate -of csv=p=0 $InputPath 2>$null | Where-Object { $_ -and $_.Trim() -ne "" } | Select-Object -First 1
         $SourceSampleRate = if ($SampleRateRaw) { [int]$SampleRateRaw.Trim() } else { 0 }
 
         # If we couldn't detect sample rate, default to 48000 Hz

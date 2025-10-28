@@ -14,23 +14,25 @@ Video conversion workspace for batch converting videos to AV1/HEVC using ffmpeg 
 
 ## Key Design Patterns
 
-1. **Quality Preview**: Optional 10-second VMAF test before conversion. Configurable via `$EnableQualityPreview`, `$PreviewDuration`, `$PreviewStartPosition`, `$VMAF_Subsample` in config.ps1. Requires libvmaf.
+1. **Quality Preview**: Optional 10-second VMAF test before conversion. Configurable via `$EnableQualityPreview`, `$PreviewDuration`, `$PreviewStartPosition`, `$VMAF_Subsample` (1-500, default 30) in config.ps1. Requires libvmaf.
 
-2. **Codec/Container Compatibility**: Centralized in `__config/codec_mappings.ps1`. Define only `SupportedVideoCodecs` and `SupportedAudioCodecs` - anything else is incompatible. Functions: `Test-CodecContainerCompatibility`, `Test-AudioContainerCompatibility`, `Get-SkipReason`.
+2. **Preset Mapping**: Centralized in `$PresetMap` (config.ps1). Maps slider positions 1-5 to encoder-specific presets (NVENC: p1-p7, SVT-AV1: 10-4, x265: veryfast-veryslow). Single source of truth prevents duplication across convert_videos.ps1, quality_preview_helper.ps1, and show_conversion_ui.ps1.
 
-3. **Hardware Acceleration**: CUDA (primary) → D3D11VA (FLV/3GP/DIVX fallback) → Software (auto fallback).
+3. **Codec/Container Compatibility**: Centralized in `__config/codec_mappings.ps1`. Define only `SupportedVideoCodecs` and `SupportedAudioCodecs` - anything else is incompatible. Functions: `Test-CodecContainerCompatibility`, `Test-AudioContainerCompatibility`, `Get-SkipReason`.
 
-4. **Dynamic Parameters**: Two-stage matching - resolution tier, then FPS range. Applies `$BitrateModifier`.
+4. **Hardware Acceleration**: CUDA (primary) → D3D11VA (FLV/3GP/DIVX fallback) → Software (auto fallback).
 
-5. **Audio Compatibility**: Detects codec via ffprobe, auto re-encodes incompatible codecs (WMA, Vorbis, DTS, PCM variants). Falls back to AAC for MP4/MOV.
+5. **Dynamic Parameters**: Two-stage matching - resolution tier, then FPS range. Applies `$BitrateModifier`.
 
-6. **Container Validation**: Blocks incompatible combinations (e.g., AVI+AV1, WebM+HEVC, MOV+AV1). See `codec_mappings.ps1`.
+6. **Audio Compatibility**: Detects codec via ffprobe, auto re-encodes incompatible codecs (WMA, Vorbis, DTS, PCM variants). Falls back to AAC for MP4/MOV.
 
-7. **Collision Detection**: Renames files when multiple sources produce same output (e.g., video.ts → video_ts.mp4).
+7. **Container Validation**: Blocks incompatible combinations (e.g., AVI+AV1, WebM+HEVC, MOV+AV1). See `codec_mappings.ps1`.
 
-8. **Path Handling**: Uses `-LiteralPath` for `[]` brackets, `Join-Path` for construction, UTF-8 without BOM.
+8. **Collision Detection**: Renames files when multiple sources produce same output (e.g., video.ts → video_ts.mp4).
 
-9. **MKV Handling**: `-map 0`, `-fflags +genpts`, `-ignore_unknown` to preserve all streams.
+9. **Path Handling**: Uses `-LiteralPath` for `[]` brackets, `Join-Path` for construction, UTF-8 without BOM.
+
+10. **MKV Handling**: `-map 0`, `-fflags +genpts`, `-ignore_unknown` to preserve all streams.
 
 ## Critical Implementation Notes
 
@@ -65,13 +67,21 @@ Video conversion workspace for batch converting videos to AV1/HEVC using ffmpeg 
 ## Configuration
 
 **Essential Settings** (`__config/config.ps1`):
-- `$OutputCodec` - "AV1" or "HEVC"
+- `$OutputCodec` - "AV1_NVENC", "HEVC_NVENC", "AV1_SVT", or "HEVC_SVT"
+- `$DefaultPreset` - Slider position 1-5 (default: 5 = Slowest/best quality)
+- `$PresetMap` - Centralized preset mapping (1-5 to encoder-specific presets)
 - `$SkipExistingFiles` - Skip converted files
 - `$PreserveContainer` - Keep original format
 - `$PreserveAudio` - Copy audio (auto-disabled for incompatible codecs)
-- `$BitrateModifier` - Global multiplier (0.1x-3.0x)
+- `$BitrateMultiplier` - Global multiplier (0.1x-3.0x)
 - `$EnableQualityPreview` - Enable VMAF test
+- `$VMAF_Subsample` - VMAF sampling (1-500, default: 30, lower = more accurate)
 - `$ParameterMap` - Resolution/FPS encoding profiles
+
+**Preset Mapping** (`$PresetMap`):
+- Position 1 (Fastest): NVENC=p1, SVT-AV1=10, x265=veryfast
+- Position 5 (Slowest): NVENC=p7, SVT-AV1=4, x265=veryslow
+- All scripts reference `$PresetMap` - modify once, affects all encoding operations
 
 **Audio Codecs**: "aac" (MP4/MOV compatible) or "opus" (better quality, MKV/WebM)
 

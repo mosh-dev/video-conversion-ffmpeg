@@ -1,15 +1,17 @@
 # Test script for comprehensive video metadata detection
 # This script tests all metadata fields used by the conversion script
 
+# Import configuration for centralized file extensions
+. .\__config\config.ps1
+
 # Load helper functions from __lib/helpers.ps1
 . .\__lib\helpers.ps1
 
 # Test all video files in _input_files directory
-$InputDir = ".\_input_files"
 $VideoFiles = @()
 
-# Common video extensions
-$Extensions = @("*.mp4", "*.mov", "*.mkv", "*.ts", "*.m2ts", "*.m4v", "*.avi", "*.wmv", "*.webm")
+# Use centralized file extensions from config.ps1
+$Extensions = $FileExtensions
 
 foreach ($Extension in $Extensions) {
     $VideoFiles += Get-ChildItem -Path $InputDir -Filter $Extension -File -ErrorAction SilentlyContinue

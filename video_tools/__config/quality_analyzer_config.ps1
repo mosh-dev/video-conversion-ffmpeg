@@ -5,6 +5,9 @@
 # Modify these settings according to your needs, then run analyze_quality.ps1
 # ============================================================================
 
+# Import main config for shared settings (file extensions, directories)
+. "$PSScriptRoot\config.ps1"
+
 # ============================================================================
 # QUALITY METRICS CONFIGURATION
 # ============================================================================
@@ -27,7 +30,7 @@ $EnablePSNR = $true              # PSNR: Peak signal-to-noise ratio (fastest) - 
 $VMAF_Excellent = 95
 $VMAF_Good = 90
 $VMAF_Acceptable = 80
-$VMAF_Subsample = 100            # n_subsample for VMAF (1-500, lower = more accurate but slower)
+$VMAF_Subsample = 30             # n_subsample for VMAF (1-500, lower = more accurate but slower)
 
 # SSIM thresholds (0-1 scale)
 $SSIM_Excellent = 0.98
@@ -51,5 +54,6 @@ $ReportDir = ".\__reports"        # Quality reports directory
 # SUPPORTED VIDEO EXTENSIONS
 # ============================================================================
 
-# Supported extensions for file matching
-$VideoExtensions = @(".mp4", ".mov", ".mkv", ".wmv", ".avi", ".ts", ".m2ts", ".m4v", ".webm", ".flv", ".3gp")
+# Derive video extensions from centralized FileExtensions (strip "*" wildcard)
+# FileExtensions format: "*.mp4" → VideoExtensions format: ".mp4"
+$VideoExtensions = $FileExtensions | ForEach-Object { $_.Replace("*", "") }

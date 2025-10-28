@@ -23,8 +23,24 @@ $TempDir = ".\__temp"  # Temporary directory for 2-pass encoding log files
 
 $SkipExistingFiles = $true        # Set to $true to skip existing output files (recommended), $false to reconvert everything
 
-# File Extensions to Process (comma-separated)
-$FileExtensions = @("*.mp4", "*.mov", "*.mkv", "*.ts", "*.m2ts", "*.m4v", "*.webm", "*.wmv", "*.avi")
+# File Extensions to Process (all supported video formats from codec_mappings.ps1)
+# This list is used by all scripts to scan for video files in _input_files directory
+$FileExtensions = @(
+    "*.mp4",    # MPEG-4 container - Best compatibility
+    "*.m4v",    # iTunes video format
+    "*.mov",    # QuickTime format - Professional editing
+    "*.mkv",    # Matroska - Most flexible
+    "*.webm",   # Web media format
+    "*.avi",    # Legacy AVI format
+    "*.wmv",    # Windows Media Video
+    "*.asf",    # Advanced Systems Format (same as WMV)
+    "*.flv",    # Flash Video - Legacy streaming
+    "*.3gp",    # 3GPP mobile format
+    "*.ts",     # MPEG Transport Stream
+    "*.m2ts",   # Blu-ray BDAV format
+    "*.vob",    # DVD Video Object
+    "*.ogv"     # Ogg Video - Open source
+)
 
 # ============================================================================
 # QUALITY PREVIEW (VMAF TEST)
@@ -39,7 +55,7 @@ $PreviewDuration = 10              # Test conversion duration (10 seconds recomm
 # Start position for test clip (in seconds from video start)
 # "middle" = extract from middle of video, or specify seconds (e.g., 30 for 30 seconds from start)
 $PreviewStartPosition = "middle"
-$VMAF_Subsample = 100             # n_subsample for VMAF (1-500, lower = more accurate but slower)
+$VMAF_Subsample = 30              # n_subsample for VMAF (1-500, lower = more accurate but slower)
 
 # ============================================================================
 # CODEC SELECTION
@@ -63,8 +79,49 @@ $OutputCodec = "AV1_NVENC"  # Change to "AV1_NVENC", "HEVC_NVENC", "AV1_SVT", or
 $OutputBitDepth = "source"  # Change to "8bit", "10bit", or "source"
 
 # Default Encoding Preset (can be changed in GUI)
-# p1 = fastest, p7 = slowest with best compression and quality
-$DefaultPreset = "p7"
+# Slider values: 1 = Fastest, 5 = Slowest
+$DefaultPreset = 5
+
+# Preset Mapping: Maps slider position (1-5) to encoder-specific presets
+# Slider 1 = Fastest encoding (lower quality, larger files)
+# Slider 5 = Slowest encoding (best quality, smallest files)
+$PresetMap = @{
+    # Slider position 1 (Fastest)
+    1 = @{
+        Label = "Fastest"
+        NVENC = "p1"          # NVENC: p1 (fastest)
+        SVT_AV1 = "10"        # SVT-AV1: 10 (fastest, 0-13 scale)
+        x265 = "veryfast"     # x265: veryfast
+    }
+    # Slider position 2 (Fast)
+    2 = @{
+        Label = "Fast"
+        NVENC = "p3"          # NVENC: p3
+        SVT_AV1 = "8"         # SVT-AV1: 8 (fast)
+        x265 = "fast"         # x265: fast
+    }
+    # Slider position 3 (Medium)
+    3 = @{
+        Label = "Medium"
+        NVENC = "p5"          # NVENC: p5 (balanced)
+        SVT_AV1 = "6"         # SVT-AV1: 6 (medium)
+        x265 = "medium"       # x265: medium
+    }
+    # Slider position 4 (Slow)
+    4 = @{
+        Label = "Slow"
+        NVENC = "p6"          # NVENC: p6
+        SVT_AV1 = "5"         # SVT-AV1: 5 (slow)
+        x265 = "slower"       # x265: slower
+    }
+    # Slider position 5 (Slowest)
+    5 = @{
+        Label = "Slowest"
+        NVENC = "p7"          # NVENC: p7 (slowest, best quality)
+        SVT_AV1 = "4"         # SVT-AV1: 4 (slowest in recommended range)
+        x265 = "veryslow"     # x265: veryslow
+    }
+}
 
 # Fallback FFmpeg Parameters (used when video metadata detection fails)
 $DefaultVideoBitrate = "20M"

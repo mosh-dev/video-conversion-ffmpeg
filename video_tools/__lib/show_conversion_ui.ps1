@@ -779,33 +779,16 @@ public class WindowHelper {
         default  { 2 }  # Default to "Same as source"
     }
 
-    # Parse preset value (e.g., "p7" -> 7, map to slider 1-5)
-    $presetNumber = 7  # Default to p7
-    if ($DefaultPreset -match "^p?(\d+)$") {
-        $presetNumber = [int]$matches[1]
-    }
-
-    # Map p1-p7 to universal preset slider (1=Fastest, 5=Slowest)
-    # p1-p2 = Fastest (1), p3 = Fast (2), p4-p5 = Medium (3), p6 = Slow (4), p7 = Slowest (5)
-    $sliderValue = switch ($presetNumber) {
-        { $_ -le 2 } { 1 }  # p1-p2 -> Fastest
-        3 { 2 }             # p3 -> Fast
-        { $_ -in 4,5 } { 3 }  # p4-p5 -> Medium
-        6 { 4 }             # p6 -> Slow
-        default { 5 }       # p7 -> Slowest
-    }
+    # Use numeric DefaultPreset directly (1-5)
+    # Validate and ensure it's in valid range
+    $sliderValue = $DefaultPreset
+    if ($sliderValue -lt 1) { $sliderValue = 1 }
+    if ($sliderValue -gt 5) { $sliderValue = 5 }
 
     $presetSlider.Value = $sliderValue
 
-    # Set initial preset label
-    $presetLabel = switch ($sliderValue) {
-        1 { "Fastest" }
-        2 { "Fast" }
-        3 { "Medium" }
-        4 { "Slow" }
-        5 { "Slowest" }
-    }
-    $presetValue.Text = $presetLabel
+    # Set initial preset label from PresetMap
+    $presetValue.Text = $PresetMap[$sliderValue].Label
 
     # Set container combo based on preserve flag
     if ($PreserveContainer) {
@@ -865,14 +848,8 @@ public class WindowHelper {
     # Preset slider event
     $presetSlider.Add_ValueChanged({
         $value = [int]$presetSlider.Value
-        $presetLabel = switch ($value) {
-            1 { "Fastest" }
-            2 { "Fast" }
-            3 { "Medium" }
-            4 { "Slow" }
-            5 { "Slowest" }
-        }
-        $presetValue.Text = $presetLabel
+        # Use PresetMap from config for label
+        $presetValue.Text = $PresetMap[$value].Label
     })
 
     # Video bitrate slider event

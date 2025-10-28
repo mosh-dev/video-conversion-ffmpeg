@@ -606,78 +606,26 @@ foreach ($File in $VideoFiles) {
         Write-Host "  HDR Metadata: Not preserving (converting to 8-bit SDR)" -ForegroundColor DarkGray
     }
 
-    # Map universal preset names to encoder-specific presets
-    # Universal: Fastest, Fast, Medium, Slow, Slowest
-    # NVENC: p1 (fastest) to p7 (slowest)
-    # SVT-AV1: 10 (fastest) to 3 (slowest) - optimized range [4,5,6,8,10]
-    # x265: veryfast to veryslow
-    $EncoderPreset = switch ($Preset) {
-        "Fastest" {
-            if ($IsSoftwareEncoder) {
-                if ($OutputCodec -eq "AV1_SVT") { "10" }       # SVT-AV1: Fastest
-                else { "veryfast" }                            # x265: Fastest
-            } else {
-                "p1"                                           # NVENC: Fastest
-            }
+    # Map universal preset names to encoder-specific presets using centralized PresetMap
+    # Convert preset name to slider position (1-5)
+    $PresetSliderPosition = switch ($Preset) {
+        "Fastest" { 1 }
+        "Fast"    { 2 }
+        "Medium"  { 3 }
+        "Slow"    { 4 }
+        "Slowest" { 5 }
+        default   { 5 }  # Default to slowest for safety
+    }
+
+    # Get encoder-specific preset from PresetMap
+    $EncoderPreset = if ($IsSoftwareEncoder) {
+        if ($OutputCodec -eq "AV1_SVT") {
+            $PresetMap[$PresetSliderPosition].SVT_AV1
+        } else {
+            $PresetMap[$PresetSliderPosition].x265
         }
-        "Fast" {
-            if ($IsSoftwareEncoder) {
-                if ($OutputCodec -eq "AV1_SVT") { "8" }        # SVT-AV1: Fast
-                else { "fast" }                                # x265: Fast
-            } else {
-                "p3"                                           # NVENC: Fast
-            }
-        }
-        "Medium" {
-            if ($IsSoftwareEncoder) {
-                if ($OutputCodec -eq "AV1_SVT") { "6" }        # SVT-AV1: Medium
-                else { "medium" }                              # x265: Medium
-            } else {
-                "p5"                                           # NVENC: Medium
-            }
-        }
-        "Slow" {
-            if ($IsSoftwareEncoder) {
-                if ($OutputCodec -eq "AV1_SVT") { "5" }        # SVT-AV1: Slow
-                else { "slower" }                              # x265: Slow
-            } else {
-                "p6"                                           # NVENC: Slow
-            }
-        }
-        "Slowest" {
-            if ($IsSoftwareEncoder) {
-                if ($OutputCodec -eq "AV1_SVT") { "4" }        # SVT-AV1: Slowest
-                else { "veryslow" }                            # x265: Slowest
-            } else {
-                "p7"                                           # NVENC: Slowest
-            }
-        }
-        default {
-            # Fallback for legacy p1-p7 format (if still used)
-            if ($Preset -match "^p(\d+)$") {
-                $PresetNum = [int]$matches[1]
-                if ($IsSoftwareEncoder) {
-                    if ($OutputCodec -eq "AV1_SVT") {
-                        # Map p1-p7 to SVT-AV1 presets 10,8,6,4,3
-                        $SVTMap = @{ 1=10; 2=10; 3=8; 4=6; 5=6; 6=4; 7=3 }
-                        "$($SVTMap[$PresetNum])"
-                    } else {
-                        $x265Map = @{ 1="veryfast"; 2="faster"; 3="fast"; 4="medium"; 5="slow"; 6="slower"; 7="veryslow" }
-                        $x265Map[$PresetNum]
-                    }
-                } else {
-                    $Preset
-                }
-            } else {
-                # Unknown preset, use slowest for safety
-                if ($IsSoftwareEncoder) {
-                    if ($OutputCodec -eq "AV1_SVT") { "3" }
-                    else { "veryslow" }
-                } else {
-                    "p7"
-                }
-            }
-        }
+    } else {
+        $PresetMap[$PresetSliderPosition].NVENC
     }
 
     # Build common video parameters
