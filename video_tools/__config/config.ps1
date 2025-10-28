@@ -30,11 +30,11 @@ $FileExtensions = @("*.mp4", "*.mov", "*.mkv", "*.ts", "*.m2ts", "*.m4v", "*.web
 # QUALITY PREVIEW (VMAF TEST)
 # ============================================================================
 
-# Enable 10-second test conversion with VMAF quality check before each full conversion
+# Enable n-second test conversion with VMAF quality check before each full conversion
 $EnableQualityPreview = $true     # Set to $true to enable quality preview, $false to skip
 
 # Duration of test clip in seconds
-$PreviewDuration = 5              # Test conversion duration (5 seconds recommended)
+$PreviewDuration = 10              # Test conversion duration (10 seconds recommended)
 
 # Start position for test clip (in seconds from video start)
 # "middle" = extract from middle of video, or specify seconds (e.g., 30 for 30 seconds from start)
