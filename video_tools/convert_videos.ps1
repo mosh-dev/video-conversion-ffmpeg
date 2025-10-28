@@ -381,11 +381,15 @@ foreach ($File in $VideoFiles) {
         # Check audio/container compatibility for ALL audio streams
         $NeedsReencoding = $false
         $IncompatibleCodecs = @()
+        $ShownMessages = @{}  # Track which messages we've already shown
 
         foreach ($SourceAudioCodec in $AllAudioCodecs) {
-            # Check for unknown/unsupported codecs (ffmpeg reports as "none")
-            if ($SourceAudioCodec -eq "none") {
-                Write-Host "  Note: Unknown audio codec detected (stream will be re-encoded)" -ForegroundColor Yellow
+            # Check for unknown/unsupported codecs (ffmpeg reports as "none" or "unknown")
+            if ($SourceAudioCodec -eq "none" -or $SourceAudioCodec -eq "unknown") {
+                if (-not $ShownMessages.ContainsKey("unknown")) {
+                    Write-Host "  Note: Unknown audio codec detected (cannot decode)" -ForegroundColor Yellow
+                    $ShownMessages["unknown"] = $true
+                }
                 $NeedsReencoding = $true
                 $IncompatibleCodecs += "unknown"
                 continue
@@ -393,7 +397,10 @@ foreach ($File in $VideoFiles) {
 
             # Check container compatibility
             if (-not (Test-AudioContainerCompatibility -Container $FileExtension -AudioCodec $SourceAudioCodec)) {
-                Write-Host "  Note: Re-encoding audio ($($SourceAudioCodec.ToUpper()) codec not compatible with $($FileExtension.ToUpper()) container)" -ForegroundColor Yellow
+                if (-not $ShownMessages.ContainsKey($SourceAudioCodec)) {
+                    Write-Host "  Note: Re-encoding audio ($($SourceAudioCodec.ToUpper()) codec not compatible with $($FileExtension.ToUpper()) container)" -ForegroundColor Yellow
+                    $ShownMessages[$SourceAudioCodec] = $true
+                }
                 $NeedsReencoding = $true
                 $IncompatibleCodecs += $SourceAudioCodec
             }
