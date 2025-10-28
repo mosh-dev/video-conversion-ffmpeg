@@ -358,25 +358,36 @@ foreach ($File in $VideoFiles) {
         [System.IO.File]::AppendAllText($LogFile, "Processing: $($File.Name) - Input: $InputSizeMB MB - Using default parameters (Bitrate=$VideoBitrate, Preset=$Preset)`n", [System.Text.UTF8Encoding]::new($false))
     }
 
+    # Detect ALL audio codecs from source file using ffprobe (not just first stream)
+    # This detection runs regardless of $PreserveAudio to identify undecodable streams
+    try {
+        $AudioCodecsRaw = & ffprobe -v error -select_streams a -show_entries stream=codec_name -of csv=p=0 $InputPath 2>$null | Where-Object { $_.Trim() -ne "" }
+        $AllAudioCodecs = @()
+        foreach ($codec in $AudioCodecsRaw) {
+            $trimmed = $codec.Trim().ToLower()
+            if ($trimmed) {
+                $AllAudioCodecs += $trimmed
+            }
+        }
+    } catch {
+        $AllAudioCodecs = @()
+    }
+
+    # Check for unknown/undecodable audio codecs (ffmpeg reports as "none" or "unknown")
+    # This must happen BEFORE choosing audio settings to prevent mapping undecodable streams
+    $HasUnknownCodec = $false
+    foreach ($SourceAudioCodec in $AllAudioCodecs) {
+        if ($SourceAudioCodec -eq "none" -or $SourceAudioCodec -eq "unknown") {
+            $HasUnknownCodec = $true
+            break
+        }
+    }
+
     # Determine audio codec to use
     if ($PreserveAudio) {
         $AudioCodecToUse = "copy"
         $AudioBitrate = $null
         $AudioSampleRate = $null
-
-        # Detect ALL audio codecs from source file using ffprobe (not just first stream)
-        try {
-            $AudioCodecsRaw = & ffprobe -v error -select_streams a -show_entries stream=codec_name -of csv=p=0 $InputPath 2>$null | Where-Object { $_.Trim() -ne "" }
-            $AllAudioCodecs = @()
-            foreach ($codec in $AudioCodecsRaw) {
-                $trimmed = $codec.Trim().ToLower()
-                if ($trimmed) {
-                    $AllAudioCodecs += $trimmed
-                }
-            }
-        } catch {
-            $AllAudioCodecs = @()
-        }
 
         # Check audio/container compatibility for ALL audio streams
         $NeedsReencoding = $false
@@ -432,6 +443,7 @@ foreach ($File in $VideoFiles) {
             $AudioStreamMap = "0:a?"   # Map all audio streams
         }
     } else {
+        # Force re-encoding audio
         $AudioCodecToUse = $AudioCodecMap[$AudioCodec.ToLower()]
         if (-not $AudioCodecToUse) {
             Write-Host "  Warning: Invalid audio codec '$AudioCodec'. Using 'aac' as fallback." -ForegroundColor Yellow
@@ -440,7 +452,16 @@ foreach ($File in $VideoFiles) {
         }
         $AudioBitrate = "${SelectedAACBitrate}k"
         $AudioSampleRate = Get-AACSampleRate -InputPath $InputPath
-        $AudioStreamMap = "0:a?"  # Map all audio streams when explicitly re-encoding
+
+        # If unknown/undecodable codecs exist, only map first audio stream
+        # (ffmpeg cannot decode "none" or "unknown" codecs even when re-encoding)
+        if ($HasUnknownCodec) {
+            $AudioStreamMap = "0:a:0"  # Map only first audio stream
+            Write-Host "  Note: Unknown audio codec detected - mapping only first audio stream" -ForegroundColor Yellow
+            [System.IO.File]::AppendAllText($LogFile, "  Note: Unknown audio codec detected - mapping only first audio stream`n", [System.Text.UTF8Encoding]::new($false))
+        } else {
+            $AudioStreamMap = "0:a?"  # Map all audio streams when explicitly re-encoding
+        }
     }
 
     # ============================================================================
