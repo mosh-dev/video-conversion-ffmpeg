@@ -511,7 +511,7 @@ function Show-ConversionUI {
                         </Grid>
 
                         <TextBlock
-                            Text="Faster presets encode quickly but use more bitrate. Slower presets take longer but produce better quality."
+                            Text="Faster presets encode quickly. Slower presets take longer but produce better quality."
                             FontSize="11"
                             FontStyle="Italic"
                             Foreground="$secondaryTextColor"
