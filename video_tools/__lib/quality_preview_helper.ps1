@@ -77,30 +77,30 @@ function Test-ConversionQuality {
         # Determine if using software encoder
         $isSoftwareEncoder = ($EncodingParams.Codec -eq "AV1_SVT" -or $EncodingParams.Codec -eq "HEVC_SVT")
 
-        # Map universal preset to encoder-specific preset
+        # Map universal preset to encoder-specific preset (match main script mapping)
         $encoderPreset = switch ($EncodingParams.Preset) {
             "Fastest" {
-                if ($EncodingParams.Codec -eq "AV1_SVT") { "13" }
+                if ($EncodingParams.Codec -eq "AV1_SVT") { "10" }
                 elseif ($EncodingParams.Codec -eq "HEVC_SVT") { "veryfast" }
                 else { "p1" }
             }
             "Fast" {
-                if ($EncodingParams.Codec -eq "AV1_SVT") { "11" }
+                if ($EncodingParams.Codec -eq "AV1_SVT") { "8" }
                 elseif ($EncodingParams.Codec -eq "HEVC_SVT") { "fast" }
                 else { "p3" }
             }
             "Medium" {
-                if ($EncodingParams.Codec -eq "AV1_SVT") { "9" }
+                if ($EncodingParams.Codec -eq "AV1_SVT") { "6" }
                 elseif ($EncodingParams.Codec -eq "HEVC_SVT") { "medium" }
                 else { "p5" }
             }
             "Slow" {
-                if ($EncodingParams.Codec -eq "AV1_SVT") { "8" }
+                if ($EncodingParams.Codec -eq "AV1_SVT") { "4" }
                 elseif ($EncodingParams.Codec -eq "HEVC_SVT") { "slower" }
                 else { "p6" }
             }
             "Slowest" {
-                if ($EncodingParams.Codec -eq "AV1_SVT") { "7" }
+                if ($EncodingParams.Codec -eq "AV1_SVT") { "3" }
                 elseif ($EncodingParams.Codec -eq "HEVC_SVT") { "veryslow" }
                 else { "p7" }
             }
@@ -110,38 +110,156 @@ function Test-ConversionQuality {
             }
         }
 
-        # Build encoding arguments (software encoders don't use hardware acceleration)
+        # Build encoding arguments
         if ($isSoftwareEncoder) {
-            $testEncodeArgs = @(
-                "-i", $tempSource,
-                "-c:v", $ffmpegCodec,
-                "-preset", $encoderPreset,
-                "-b:v", $EncodingParams.VideoBitrate,
-                "-loglevel", "info",
-                "-stats",
-                "-an",  # No audio (test clip has no audio)
-                "-y",
-                $tempEncoded
-            )
+            # 2-PASS ENCODING FOR SVT (matches main conversion script)
+            Write-Host ""  # New line before starting
+            Write-Host "  Using 2-pass encoding for accurate quality preview..." -ForegroundColor DarkGray
 
-            # Add maxrate/bufsize only for x265 (not for SVT-AV1)
-            if ($EncodingParams.Codec -eq "HEVC_SVT") {
-                # x265 supports maxrate/bufsize
-                $testEncodeArgs = @(
+            # Save current working directory and switch to temp dir
+            $OriginalWorkingDir = Get-Location
+            Set-Location -Path $tempDir
+
+            # Use relative filename for pass log (basename only)
+            $PassLogFileBasename = "preview_pass"
+            $PassLogFile = Join-Path $tempDir $PassLogFileBasename
+
+            try {
+                # ===== PASS 1 =====
+                Write-Host "  Pass 1/2: Analyzing..." -ForegroundColor Yellow -NoNewline
+
+                $Pass1Args = @(
+                    "-y",
                     "-i", $tempSource,
+                    "-map", "0:v:0"
+                )
+
+                # Add common video parameters
+                $Pass1Args += @(
                     "-c:v", $ffmpegCodec,
                     "-preset", $encoderPreset,
-                    "-b:v", $EncodingParams.VideoBitrate,
-                    "-maxrate", $EncodingParams.MaxRate,
-                    "-bufsize", $EncodingParams.BufSize,
-                    "-loglevel", "info",
-                    "-stats",
-                    "-an",
-                    "-y",
-                    $tempEncoded
+                    "-b:v", $EncodingParams.VideoBitrate
                 )
+
+                # Add codec-specific parameters for Pass 1
+                if ($EncodingParams.Codec -eq "AV1_SVT") {
+                    # SVT-AV1: Match main script quality parameters
+                    $Pass1Args += @(
+                        "-g", "240",
+                        "-svtav1-params", "tune=0:enable-restoration=1:enable-cdef=1:enable-qm=1",
+                        "-pass", "1",
+                        "-passlogfile", $PassLogFile
+                    )
+                } elseif ($EncodingParams.Codec -eq "HEVC_SVT") {
+                    # x265: Match main script quality parameters
+                    $Pass1Args += @(
+                        "-maxrate", $EncodingParams.MaxRate,
+                        "-bufsize", $EncodingParams.BufSize,
+                        "-x265-params", "pass=1:stats=$PassLogFileBasename.log:log-level=error:tune=vmaf:psy-rd=2.0:aq-mode=3",
+                        "-pass", "1"
+                    )
+                }
+
+                # Pass 1 outputs to NUL
+                $Pass1Args += @("-loglevel", "error", "-an", "-sn", "-f", "null", "NUL")
+
+                # Execute Pass 1
+                $null = & ffmpeg @Pass1Args 2>&1
+                $exitCode1 = $LASTEXITCODE
+
+                if ($exitCode1 -ne 0) {
+                    Write-Host " Failed" -ForegroundColor Red
+                    Set-Location -Path $OriginalWorkingDir
+                    return $null
+                }
+                Write-Host " Done" -ForegroundColor Green
+
+                # ===== PASS 2 =====
+                Write-Host "  Pass 2/2: Encoding..." -ForegroundColor Yellow -NoNewline
+
+                $Pass2Args = @(
+                    "-y",
+                    "-i", $tempSource,
+                    "-map", "0:v:0"
+                )
+
+                # Add common video parameters
+                $Pass2Args += @(
+                    "-c:v", $ffmpegCodec,
+                    "-preset", $encoderPreset,
+                    "-b:v", $EncodingParams.VideoBitrate
+                )
+
+                # Add codec-specific parameters for Pass 2
+                if ($EncodingParams.Codec -eq "AV1_SVT") {
+                    # SVT-AV1: Match main script quality parameters
+                    $Pass2Args += @(
+                        "-g", "240",
+                        "-svtav1-params", "tune=0:enable-restoration=1:enable-cdef=1:enable-qm=1",
+                        "-pass", "2",
+                        "-passlogfile", $PassLogFile
+                    )
+                } elseif ($EncodingParams.Codec -eq "HEVC_SVT") {
+                    # x265: Match main script quality parameters
+                    $Pass2Args += @(
+                        "-maxrate", $EncodingParams.MaxRate,
+                        "-bufsize", $EncodingParams.BufSize,
+                        "-x265-params", "pass=2:stats=$PassLogFileBasename.log:log-level=error:tune=vmaf:psy-rd=2.0:aq-mode=3",
+                        "-pass", "2"
+                    )
+                }
+
+                # Pass 2 outputs to file
+                $Pass2Args += @("-loglevel", "error", "-an", "-f", "mp4", $tempEncoded)
+
+                # Execute Pass 2
+                $encodeOutput = & ffmpeg @Pass2Args 2>&1 | Out-String
+                $exitCode2 = $LASTEXITCODE
+
+                # Clean up pass log files
+                Get-ChildItem -Path $tempDir -Filter "${PassLogFileBasename}*" -File -ErrorAction SilentlyContinue |
+                    Remove-Item -Force -ErrorAction SilentlyContinue
+
+                # Clean up x265-specific temp files
+                if ($EncodingParams.Codec -eq "HEVC_SVT") {
+                    $x265CleanupPatterns = @("*.temp", "*.cutree", "*.cutree.temp", "*.log.temp", "*.log.mbtree")
+                    foreach ($pattern in $x265CleanupPatterns) {
+                        Get-ChildItem -Path "." -Filter $pattern -File -ErrorAction SilentlyContinue |
+                            Remove-Item -Force -ErrorAction SilentlyContinue
+                    }
+                }
+
+                # Restore working directory
+                Set-Location -Path $OriginalWorkingDir
+
+                if ($exitCode2 -ne 0) {
+                    Write-Host " Failed" -ForegroundColor Red
+
+                    # Show relevant error details
+                    $errorLines = $encodeOutput -split "`n" | Where-Object {
+                        $_ -match "(error|failed|invalid|not supported|cannot|unable)" -and
+                        $_ -notmatch "deprecated"
+                    } | Select-Object -First 3
+
+                    if ($errorLines) {
+                        foreach ($line in $errorLines) {
+                            Write-Host "  $($line.Trim())" -ForegroundColor Red
+                        }
+                    }
+
+                    return $null
+                }
+                Write-Host " Done" -ForegroundColor Green
+
+            } catch {
+                # Restore working directory on error
+                Set-Location -Path $OriginalWorkingDir
+                Write-Host " Failed: $($_.Exception.Message)" -ForegroundColor Red
+                return $null
             }
+
         } else {
+            # SINGLE-PASS ENCODING FOR NVENC
             $testEncodeArgs = @(
                 "-hwaccel", $EncodingParams.HWAccel,
                 "-i", $tempSource,
@@ -156,32 +274,38 @@ function Test-ConversionQuality {
                 "-y",
                 $tempEncoded
             )
+
+            Write-Host ""  # New line for progress display
+            $encodeOutput = Invoke-FFmpegWithProgress -Arguments $testEncodeArgs
+
+            # Show completion message
+            Write-Host "  Encoding test clip..." -NoNewline -ForegroundColor Yellow
+
+            if (-not (Test-Path $tempEncoded)) {
+                Write-Host " Failed" -ForegroundColor Red
+
+                # Show relevant error details from ffmpeg output
+                $errorLines = $encodeOutput -split "`n" | Where-Object {
+                    $_ -match "(error|failed|invalid|not supported|cannot|unable)" -and
+                    $_ -notmatch "deprecated"
+                } | Select-Object -First 3
+
+                if ($errorLines) {
+                    foreach ($line in $errorLines) {
+                        Write-Host "  $($line.Trim())" -ForegroundColor Red
+                    }
+                }
+
+                return $null
+            }
+            Write-Host " Done" -ForegroundColor Green
         }
 
-        Write-Host ""  # New line for progress display
-        $encodeOutput = Invoke-FFmpegWithProgress -Arguments $testEncodeArgs
-
-        # Show completion message
-        Write-Host "  Encoding test clip..." -NoNewline -ForegroundColor Yellow
-
+        # Verify encoded file exists (for both paths)
         if (-not (Test-Path $tempEncoded)) {
-            Write-Host " Failed" -ForegroundColor Red
-
-            # Show relevant error details from ffmpeg output
-            $errorLines = $encodeOutput -split "`n" | Where-Object {
-                $_ -match "(error|failed|invalid|not supported|cannot|unable)" -and
-                $_ -notmatch "deprecated"
-            } | Select-Object -First 3
-
-            if ($errorLines) {
-                foreach ($line in $errorLines) {
-                    Write-Host "  $($line.Trim())" -ForegroundColor Red
-                }
-            }
-
+            Write-Host "  Error: Encoded test clip not found" -ForegroundColor Red
             return $null
         }
-        Write-Host " Done" -ForegroundColor Green
 
         # Run VMAF analysis
         Write-Host "  Running VMAF analysis..." -ForegroundColor Yellow -NoNewline
