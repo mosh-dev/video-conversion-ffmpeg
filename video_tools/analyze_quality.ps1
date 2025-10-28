@@ -11,6 +11,7 @@
 
 # Load helper functions
 . ".\__lib\helpers.ps1"
+. ".\__lib\ffmpeg_helpers.ps1"
 
 # Load UI module
 . ".\__lib\show_quality_analyzer_ui.ps1"
@@ -46,24 +47,7 @@ $ReportFile = Join-Path $ReportDir "quality_comparison_$Timestamp.json"
 # HELPER FUNCTIONS
 # ============================================================================
 
-function Get-BaseFileName {
-    param([string]$FilePath)
-
-    $fileName = [System.IO.Path]::GetFileNameWithoutExtension($FilePath)
-
-    # Handle collision-renamed files (e.g., video_ts.mp4 -> video)
-    # Check if filename ends with _extension pattern
-    foreach ($ext in $VideoExtensions) {
-        $extPattern = "_" + $ext.TrimStart('.') + "$"
-        if ($fileName -match $extPattern) {
-            $fileName = $fileName -replace $extPattern, ""
-            break
-        }
-    }
-
-    return $fileName
-}
-
+# Get-BaseFileName is now loaded from lib/ffmpeg_helpers.ps1
 # Get-VideoMetadata is now loaded from lib/helpers.ps1
 
 function Compare-VideoQuality {
@@ -182,18 +166,8 @@ function Compare-VideoQuality {
         Write-Host ""
 
         # Capture and filter output to show only progress
-        $ffmpegOutput = & ffmpeg @ffmpegArgs 2>&1 | ForEach-Object {
-            $line = $_.ToString()
+        $ffmpegOutput = Invoke-FFmpegWithProgress -Arguments $ffmpegArgs
 
-            # Only show progress lines (frame=... fps=... etc.)
-            if ($line -match "^frame=") {
-                Write-Host "`r  $line" -NoNewline -ForegroundColor Cyan
-            }
-
-            $line
-        } | Out-String
-
-        Write-Host ""
         Write-Host ""
 
         # Parse metrics from ffmpeg output
@@ -251,61 +225,7 @@ function Compare-VideoQuality {
     }
 }
 
-function Get-PrimaryMetricValue {
-    param($Result)
-
-    # Priority: VMAF > SSIM > PSNR
-    if ($EnableVMAF -and $null -ne $Result.VMAF) {
-        return @{ Value = $Result.VMAF; Name = "VMAF"; Type = "VMAF" }
-    } elseif ($EnableSSIM -and $null -ne $Result.SSIM) {
-        return @{ Value = $Result.SSIM; Name = "SSIM"; Type = "SSIM" }
-    } elseif ($EnablePSNR -and $null -ne $Result.PSNR) {
-        return @{ Value = $Result.PSNR; Name = "PSNR"; Type = "PSNR" }
-    }
-    return $null
-}
-
-function Get-QualityAssessment {
-    param($Metric)
-
-    if (-not $Metric) {
-        return "Unknown"
-    }
-
-    switch ($Metric.Type) {
-        "VMAF" {
-            if ($Metric.Value -ge $VMAF_Excellent) { return "Excellent" }
-            elseif ($Metric.Value -ge $VMAF_Good) { return "Very Good" }
-            elseif ($Metric.Value -ge $VMAF_Acceptable) { return "Acceptable" }
-            else { return "Poor" }
-        }
-        "SSIM" {
-            if ($Metric.Value -ge $SSIM_Excellent) { return "Excellent" }
-            elseif ($Metric.Value -ge $SSIM_Good) { return "Very Good" }
-            elseif ($Metric.Value -ge $SSIM_Acceptable) { return "Acceptable" }
-            else { return "Poor" }
-        }
-        "PSNR" {
-            if ($Metric.Value -ge $PSNR_Excellent) { return "Excellent" }
-            elseif ($Metric.Value -ge $PSNR_Good) { return "Very Good" }
-            elseif ($Metric.Value -ge $PSNR_Acceptable) { return "Acceptable" }
-            else { return "Poor" }
-        }
-    }
-    return "Unknown"
-}
-
-function Get-QualityColor {
-    param([string]$Assessment)
-
-    switch ($Assessment) {
-        "Excellent" { return "Green" }
-        "Very Good" { return "Cyan" }
-        "Acceptable" { return "Yellow" }
-        "Poor" { return "Red" }
-        default { return "Gray" }
-    }
-}
+# Get-PrimaryMetricValue, Get-QualityAssessment, Get-QualityColor are now loaded from lib/ffmpeg_helpers.ps1
 
 # ============================================================================
 # MAIN SCRIPT
@@ -384,13 +304,13 @@ $currentComparison = 0
 $matchedPairs = @()
 
 foreach ($outputFile in $outputFiles) {
-    $baseName = Get-BaseFileName -FilePath $outputFile.FullName
+    $baseName = Get-BaseFileName -FilePath $outputFile.FullName -VideoExtensions $VideoExtensions
 
     # Try to find matching input/source file
     $matchedSource = $null
 
     foreach ($inputFile in $inputFiles) {
-        $inputBaseName = Get-BaseFileName -FilePath $inputFile.FullName
+        $inputBaseName = Get-BaseFileName -FilePath $inputFile.FullName -VideoExtensions $VideoExtensions
 
         if ($baseName -eq $inputBaseName) {
             $matchedSource = $inputFile
@@ -439,9 +359,12 @@ foreach ($pair in $matchedPairs) {
         continue
     }
 
-    # Calculate compression ratio
-    $compressionRatio = [math]::Round($pair.Source.Length / $pair.Encoded.Length, 2)
-    $spaceSaved = [math]::Round((($pair.Source.Length - $pair.Encoded.Length) / $pair.Source.Length * 100), 1)
+    # Calculate compression ratio using helper function
+    $sourceSizeMB = [math]::Round($pair.Source.Length / 1MB, 2)
+    $encodedSizeMB = [math]::Round($pair.Encoded.Length / 1MB, 2)
+    $stats = Get-CompressionStats -InputSizeMB $sourceSizeMB -OutputSizeMB $encodedSizeMB
+    $compressionRatio = $stats.CompressionRatio
+    $spaceSaved = $stats.SpaceSaved
 
     Write-Host "  Compression: ${compressionRatio}x (${spaceSaved}% saved)" -ForegroundColor Gray
     Write-Host "  Resolution: $($sourceInfo.Resolution) -> $($encodedInfo.Resolution)" -ForegroundColor Gray
@@ -454,8 +377,17 @@ foreach ($pair in $matchedPairs) {
     $result = Compare-VideoQuality -SourcePath $pair.Source.FullName -EncodedPath $pair.Encoded.FullName -CurrentIndex $currentComparison -TotalCount $matchedPairs.Count
 
     if ($result) {
-        $primaryMetricData = Get-PrimaryMetricValue -Result $result
-        $assessment = Get-QualityAssessment -Metric $primaryMetricData
+        $primaryMetricData = Get-PrimaryMetricValue -Result $result -EnableVMAF $EnableVMAF -EnableSSIM $EnableSSIM -EnablePSNR $EnablePSNR
+        $assessment = Get-QualityAssessment -Metric $primaryMetricData `
+                                            -VMAF_Excellent $VMAF_Excellent `
+                                            -VMAF_Good $VMAF_Good `
+                                            -VMAF_Acceptable $VMAF_Acceptable `
+                                            -SSIM_Excellent $SSIM_Excellent `
+                                            -SSIM_Good $SSIM_Good `
+                                            -SSIM_Acceptable $SSIM_Acceptable `
+                                            -PSNR_Excellent $PSNR_Excellent `
+                                            -PSNR_Good $PSNR_Good `
+                                            -PSNR_Acceptable $PSNR_Acceptable
 
         Write-Host ""
         Write-Host "  +-- Quality Metrics ---------------------+" -ForegroundColor DarkGray

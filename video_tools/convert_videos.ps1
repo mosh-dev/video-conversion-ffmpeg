@@ -14,6 +14,7 @@
 
 # Load helper functions
 . .\__lib\helpers.ps1
+. .\__lib\ffmpeg_helpers.ps1
 . .\__lib\quality_preview_helper.ps1
 
 # ============================================================================
@@ -420,16 +421,10 @@ foreach ($File in $VideoFiles) {
                                            -StartPosition $PreviewStartPosition
 
         if ($null -ne $vmafScore) {
-            # Display VMAF score with color coding
-            $scoreColor = if ($vmafScore -ge 95) { "Green" } `
-                         elseif ($vmafScore -ge 90) { "Cyan" } `
-                         elseif ($vmafScore -ge 80) { "Yellow" } `
-                         else { "Red" }
-
-            $assessment = if ($vmafScore -ge 95) { "Excellent" } `
-                         elseif ($vmafScore -ge 90) { "Very Good" } `
-                         elseif ($vmafScore -ge 80) { "Acceptable" } `
-                         else { "Poor" }
+            # Display VMAF score with color coding using helper functions
+            $vmafMetric = @{ Value = $vmafScore; Type = "VMAF" }
+            $assessment = Get-QualityAssessment -Metric $vmafMetric
+            $scoreColor = Get-QualityColor -Assessment $assessment
 
             Write-Host ""
             Write-Host "  ~VMAF Score: " -NoNewline -ForegroundColor White
@@ -818,20 +813,8 @@ foreach ($File in $VideoFiles) {
             [System.IO.File]::AppendAllText($LogFile, "Pass 1 Command: $Pass1Command`n", [System.Text.UTF8Encoding]::new($false))
 
             # Execute Pass 1 with filtered real-time progress display
-            $Pass1Output = & ffmpeg @Pass1Args 2>&1 | ForEach-Object {
-                $line = $_.ToString()
-
-                # Only show progress lines (frame=... fps=... etc.)
-                if ($line -match "^frame=") {
-                    Write-Host "`r  $line" -NoNewline -ForegroundColor Cyan
-                }
-
-                $line
-            } | Out-String
+            $Pass1Output = Invoke-FFmpegWithProgress -Arguments $Pass1Args
             $ExitCode = $LASTEXITCODE
-
-            # Move to new line after progress display
-            Write-Host ""
 
             if ($ExitCode -ne 0) {
                 Write-Host "  Pass 1 failed (code: $ExitCode)" -ForegroundColor Red
@@ -901,20 +884,8 @@ foreach ($File in $VideoFiles) {
             [System.IO.File]::AppendAllText($LogFile, "Pass 2 Command: $Pass2Command`n", [System.Text.UTF8Encoding]::new($false))
 
             # Execute Pass 2 with filtered real-time progress display
-            $Pass2Output = & ffmpeg @Pass2Args 2>&1 | ForEach-Object {
-                $line = $_.ToString()
-
-                # Only show progress lines (frame=... fps=... etc.)
-                if ($line -match "^frame=") {
-                    Write-Host "`r  $line" -NoNewline -ForegroundColor Cyan
-                }
-
-                $line
-            } | Out-String
+            $Pass2Output = Invoke-FFmpegWithProgress -Arguments $Pass2Args
             $ExitCode = $LASTEXITCODE
-
-            # Move to new line after progress display
-            Write-Host ""
 
             # Clean up all pass log files from temp directory
             Get-ChildItem -Path $TempDir -Filter "ffmpeg2pass_$($BaseFileName)*" -File -ErrorAction SilentlyContinue |
@@ -970,16 +941,7 @@ foreach ($File in $VideoFiles) {
             [System.IO.File]::AppendAllText($LogFile, "Command: $FFmpegCommand`n", [System.Text.UTF8Encoding]::new($false))
 
             # Execute ffmpeg with filtered real-time progress display
-            $FFmpegOutput = & ffmpeg @FFmpegArgs 2>&1 | ForEach-Object {
-                $line = $_.ToString()
-
-                # Only show progress lines (frame=... fps=... etc.)
-                if ($line -match "^frame=") {
-                    Write-Host "`r  $line" -NoNewline -ForegroundColor Cyan
-                }
-
-                $line
-            } | Out-String
+            $FFmpegOutput = Invoke-FFmpegWithProgress -Arguments $FFmpegArgs -ShowNewlineAfter $false
             $ExitCode = $LASTEXITCODE
 
             # Clear the progress line
@@ -1014,9 +976,10 @@ foreach ($File in $VideoFiles) {
             }
 
             # Calculate compression stats with safety checks
-            if ($OutputSizeMB -gt 0 -and $InputSizeMB -gt 0) {
-                $CompressionRatio = [math]::Round(($InputSizeMB / $OutputSizeMB), 2)
-                $SpaceSaved = [math]::Round((($InputSizeMB - $OutputSizeMB) / $InputSizeMB * 100), 1)
+            $stats = Get-CompressionStats -InputSizeMB $InputSizeMB -OutputSizeMB $OutputSizeMB
+            if ($stats.CompressionRatio -gt 0) {
+                $CompressionRatio = $stats.CompressionRatio
+                $SpaceSaved = $stats.SpaceSaved
                 Write-Host "  Success: $DurationStr | $OutputSizeMB MB | Compression: ${CompressionRatio}x (${SpaceSaved}% saved) `n" -ForegroundColor Green
                 [System.IO.File]::AppendAllText($LogFile, "Success: $($File.Name) -> $OutputFileName (Duration: $TimeStr, Input: $InputSizeMB MB, Output: $OutputSizeMB MB, Compression: ${CompressionRatio}x, Space Saved: ${SpaceSaved}%)`n", [System.Text.UTF8Encoding]::new($false))
             } else {

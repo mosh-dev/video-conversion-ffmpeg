@@ -159,19 +159,9 @@ function Test-ConversionQuality {
         }
 
         Write-Host ""  # New line for progress display
-        $encodeOutput = & ffmpeg @testEncodeArgs 2>&1 | ForEach-Object {
-            $line = $_.ToString()
+        $encodeOutput = Invoke-FFmpegWithProgress -Arguments $testEncodeArgs
 
-            # Only show progress lines (frame=... fps=... etc.)
-            if ($line -match "^frame=") {
-                Write-Host "`r  $line" -NoNewline -ForegroundColor Cyan
-            }
-
-            $line
-        } | Out-String
-
-        # Move to new line and show completion message
-        Write-Host ""
+        # Show completion message
         Write-Host "  Encoding test clip..." -NoNewline -ForegroundColor Yellow
 
         if (-not (Test-Path $tempEncoded)) {
@@ -207,19 +197,9 @@ function Test-ConversionQuality {
         )
 
         Write-Host ""  # New line for progress display
-        $vmafOutput = & ffmpeg @vmafArgs 2>&1 | ForEach-Object {
-            $line = $_.ToString()
+        $vmafOutput = Invoke-FFmpegWithProgress -Arguments $vmafArgs
 
-            # Only show progress lines (frame=... fps=... etc.)
-            if ($line -match "^frame=") {
-                Write-Host "`r  $line" -NoNewline -ForegroundColor Cyan
-            }
-
-            $line
-        } | Out-String
-
-        # Move to new line and show completion message
-        Write-Host ""
+        # Show completion message
         Write-Host "  Running VMAF analysis..." -NoNewline -ForegroundColor Yellow
 
         # Parse VMAF score
