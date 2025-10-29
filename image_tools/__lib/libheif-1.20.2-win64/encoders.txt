@@ -1,0 +1,13 @@
+AVIF encoders:
+- aom = AOMedia Project AV1 Encoder v3.13.1 [default]
+- svt = SVT-AV1 encoder v3.1.2
+- rav1e = Rav1e encoder v0.8.1
+HEIC encoders:
+- x265 = x265 HEVC encoder (4.1+1-1d117be) [default]
+- kvazaar = kvazaar HEVC encoder
+JPEG encoders:
+- jpeg = libjpeg-turbo 3.1.2 (libjpeg 8.0) [default]
+JPEG 2000 encoders:
+- openjpeg = OpenJPEG 2.5.4 [default]
+JPEG 2000 (HT) encoders:
+- openjph = OpenJPH 0.24.1 [default]
