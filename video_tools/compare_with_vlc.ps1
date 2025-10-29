@@ -168,3 +168,25 @@ Write-Host "--------------------------------------------------" -ForegroundColor
 # Call the main script (same PowerShell session)
 Write-Host "`nLaunching VLC players..." -ForegroundColor Cyan
 & $scriptPath -Video1 $sourcePath -Video2 $outputPath
+
+
+$action = $null
+while ($true) {
+    Write-Host "Select an option [P/Q]: " -NoNewline -ForegroundColor Yellow
+    $action = Read-Host
+
+    if ($action -eq 'Q' -or $action -eq 'q') {
+        Write-Host "`nExiting...`n" -ForegroundColor Gray
+        exit 0
+    } elseif ($action -eq 'P' -or $action -eq 'v') {
+        # Restart script
+        & $PSCommandPath
+        exit 0
+    } else {
+        Write-Host "Invalid option. Please enter P or Q.`n" -ForegroundColor Red
+    }
+}
+
+# Keep terminal open
+Write-Host "Press any key to exit..." -ForegroundColor Yellow
+$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")

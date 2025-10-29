@@ -130,6 +130,9 @@ Start-Process -FilePath $VlcPath -ArgumentList $vlcArgsRight -WindowStyle Normal
 Write-Host "`n[SUCCESS] Both videos launched side-by-side" -ForegroundColor Green
 Write-Host "Press ESC in VLC to exit fullscreen mode if needed" -ForegroundColor DarkGray
 
-# Keep terminal open
-Write-Host "Press any key to exit..." -ForegroundColor Yellow
-$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+# Option to view another report or export
+Write-Host ""
+Write-Host "Options:" -ForegroundColor Yellow
+Write-Host "  [P] Play Another Video" -ForegroundColor White
+Write-Host "  [Q] Quit" -ForegroundColor White
+Write-Host ""
