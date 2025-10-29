@@ -13,6 +13,8 @@ $InputDir = ".\_input_files"
 $OutputDir = ".\_output_files"
 $LogDir = ".\__logs"
 
+$LibHeifPath = "__lib\libheif-1.20.2-win64\heif-enc.exe"
+
 # Log file will be auto-generated with timestamp (e.g., conversion_2025-01-15_14-30-45.txt)
 # This is set in convert_images.ps1 and cannot be configured here
 

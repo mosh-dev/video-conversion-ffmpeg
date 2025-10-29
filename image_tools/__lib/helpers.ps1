@@ -3,6 +3,11 @@
 # ============================================================================
 # Utility functions for logging, file operations, and conversion support
 
+$ConfigPath = Join-Path $ScriptDir "__config\config.ps1"
+
+# Load configuration
+. $ConfigPath
+
 # ============================================================================
 # LOGGING FUNCTIONS
 # ============================================================================
@@ -228,11 +233,10 @@ function Test-HEICEncodingSupport {
 function Test-LibheifAvailable {
     # Check if heif-enc is in __lib directory first
     $scriptDir = Split-Path -Parent $PSScriptRoot
-    $localHeifEnc = Join-Path $scriptDir "__lib\heif-enc.exe"
 
-    if (Test-Path $localHeifEnc) {
+    if (Test-Path $LibHeifPath) {
         # Add __lib to PATH for this session
-        $libDir = Join-Path $scriptDir "__lib"
+        $libDir = Join-Path $scriptDir "__lib\libheif-1.20.2-win64"
         if ($env:Path -notlike "*$libDir*") {
             $env:Path += ";$libDir"
         }
