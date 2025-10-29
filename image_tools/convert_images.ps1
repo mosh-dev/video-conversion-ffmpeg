@@ -56,20 +56,38 @@ if (-not (Test-Path $ReportDir)) {
 }
 
 # ============================================================================
-# VALIDATE FFMPEG
+# VALIDATE TOOLS
 # ============================================================================
 
+Write-Host "[INFO] Checking encoding tools..." -ForegroundColor Cyan
+
+# Check FFmpeg
 if (-not (Test-FFmpegAvailable)) {
     Write-Host "[ERROR] FFmpeg is not installed or not in PATH" -ForegroundColor Red
     Write-Host "        Please install FFmpeg from: https://ffmpeg.org/download.html" -ForegroundColor Yellow
     exit 1
 }
+Write-Host "  [OK] FFmpeg is available" -ForegroundColor Green
 
-if (-not (Test-HEICEncodingSupport)) {
-    Write-Host "[ERROR] FFmpeg does not have HEIC encoding support (libx265)" -ForegroundColor Red
-    Write-Host "        Please install FFmpeg with libx265 support" -ForegroundColor Yellow
-    exit 1
+# Check AVIF support
+$hasAVIF = Test-AVIFEncodingSupport
+if ($hasAVIF) {
+    Write-Host "  [OK] AVIF encoding is supported (libaom-av1)" -ForegroundColor Green
+} else {
+    Write-Host "  [WARNING] AVIF encoding not available" -ForegroundColor Yellow
 }
+
+# Check HEIC support
+$hasLibheif = Test-LibheifAvailable
+if ($hasLibheif) {
+    Write-Host "  [OK] HEIC encoding is supported (libheif)" -ForegroundColor Green
+} else {
+    Write-Host "  [WARNING] HEIC encoding not available - libheif not found" -ForegroundColor Yellow
+    Write-Host "            Download from: https://github.com/strukturag/libheif/releases" -ForegroundColor DarkGray
+    Write-Host "            Extract heif-enc.exe to a folder in your PATH" -ForegroundColor DarkGray
+}
+
+Write-Host ""
 
 # ============================================================================
 # SHOW GUI TO GET CONVERSION SETTINGS
@@ -110,6 +128,20 @@ $ParallelJobs = $settings.ParallelJobs
 
 # Set output extension based on format
 $OutputExtension = ".$OutputFormat"
+
+# Validate format support
+if ($OutputFormat -eq "avif" -and -not $hasAVIF) {
+    Write-Host "[ERROR] AVIF format selected but not supported by your FFmpeg" -ForegroundColor Red
+    Write-Host "        Please install FFmpeg with libaom-av1 encoder support" -ForegroundColor Yellow
+    exit 1
+}
+
+if ($OutputFormat -eq "heic" -and -not $hasLibheif) {
+    Write-Host "[ERROR] HEIC format selected but libheif is not installed" -ForegroundColor Red
+    Write-Host "        Download from: https://github.com/strukturag/libheif/releases" -ForegroundColor Yellow
+    Write-Host "        Extract heif-enc.exe to a folder in your PATH (e.g., C:\Windows)" -ForegroundColor Yellow
+    exit 1
+}
 
 # ============================================================================
 # INITIALIZE LOGGING
@@ -242,14 +274,16 @@ if ($ParallelJobs -eq 1) {
     $ffmpegArgs = @(
         "-i", $inputPath,
         "-c:v", $Encoder,
-        "-crf", (51 - [math]::Round($Quality * 51 / 100))  # Convert quality to CRF (lower CRF = better quality)
+        "-crf", (51 - [math]::Round($Quality * 51 / 100)),  # Convert quality to CRF (lower CRF = better quality)
+        "-frames:v", "1"                                      # Encode as single image
     )
 
-    # Set pixel format based on bit depth
+    # Set pixel format based on bit depth (use JPEG range for HEIC)
     if ($actualBitDepth -eq 10) {
         $ffmpegArgs += "-pix_fmt", "yuv${actualChromaSubsampling}p10le"
     } else {
-        $ffmpegArgs += "-pix_fmt", "yuv${actualChromaSubsampling}p"
+        # Use yuvj format (JPEG/full range) for better compatibility with HEIC viewers
+        $ffmpegArgs += "-pix_fmt", "yuvj${actualChromaSubsampling}p"
     }
 
     # Add metadata handling
@@ -259,11 +293,21 @@ if ($ParallelJobs -eq 1) {
         $ffmpegArgs += "-map_metadata", "-1"
     }
 
-    # Add HEIC/HEIF specific parameters
-    if ($OutputFormat -eq "heic" -or $OutputFormat -eq "heif") {
-        $ffmpegArgs += "-tag:v", "hvc1"        # Set codec tag for HEIC/HEIF compliance
-        $ffmpegArgs += "-f", "mov"             # Use MOV container format
-        $ffmpegArgs += "-movflags", "faststart" # Optimize for compatibility
+    # Add format-specific parameters
+    if ($OutputFormat -eq "avif") {
+        # AVIF - Proper image format with AV1 compression
+        $ffmpegArgs += "-c:v", "libaom-av1"                # Use libaom AV1 encoder
+        $ffmpegArgs += "-still-picture", "1"               # Encode as still image (not video)
+        $ffmpegArgs += "-f", "avif"                        # AVIF image format
+    } elseif ($OutputFormat -eq "heic" -or $OutputFormat -eq "heif") {
+        # HEIC - WARNING: FFmpeg creates HEVC video files, not true HEIC images
+        $ffmpegArgs += "-tag:v", "hvc1"                    # Set codec tag for HEVC in HEIF
+        $ffmpegArgs += "-f", "mp4"                         # Use MP4 container
+        $ffmpegArgs += "-movflags", "+faststart"           # Optimize file structure
+        $ffmpegArgs += "-color_range", "jpeg"              # Full color range (0-255)
+        $ffmpegArgs += "-color_primaries", "bt470bg"       # Color primaries (matches camera)
+        $ffmpegArgs += "-color_trc", "iec61966-2-1"        # sRGB transfer (matches camera)
+        $ffmpegArgs += "-colorspace", "bt470bg"            # Colorspace (matches camera)
     }
 
     # Add output path
@@ -273,10 +317,26 @@ if ($ParallelJobs -eq 1) {
     try {
         Write-Log -Message "  Converting..." -LogFile $LogFile -Color "Cyan"
 
-        $ffmpegOutput = & ffmpeg @ffmpegArgs 2>&1 | Out-String
+        # Use appropriate encoding tool
+        if ($OutputFormat -eq "heic") {
+            # Use libheif for proper HEIC encoding
+            $conversionResult = ConvertTo-HEIC -InputPath $inputPath `
+                -OutputPath $outputPath `
+                -Quality $Quality `
+                -ChromaSubsampling $actualChromaSubsampling `
+                -BitDepth $actualBitDepth `
+                -PreserveMetadata $PreserveMetadata
+
+            $conversionSuccess = $conversionResult.Success
+            $conversionOutput = $conversionResult.Output
+        } else {
+            # Use FFmpeg for AVIF and other formats
+            $conversionOutput = & ffmpeg @ffmpegArgs 2>&1 | Out-String
+            $conversionSuccess = ($LASTEXITCODE -eq 0)
+        }
 
         # Check if conversion succeeded
-        if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $outputPath)) {
+        if ($conversionSuccess -and (Test-Path -LiteralPath $outputPath)) {
             # Small delay to ensure file is fully written
             Start-Sleep -Milliseconds 100
 
@@ -319,7 +379,7 @@ if ($ParallelJobs -eq 1) {
             $SuccessCount++
         } else {
             Write-Log -Message "  [FAILED] Conversion failed" -LogFile $LogFile -Color "Red"
-            Write-Log -Message "  FFmpeg output: $ffmpegOutput" -LogFile $LogFile -Color "DarkGray"
+            Write-Log -Message "  Output: $conversionOutput" -LogFile $LogFile -Color "DarkGray"
             $FailCount++
         }
     } catch {
@@ -405,14 +465,16 @@ if ($ParallelJobs -eq 1) {
             $ffmpegArgs = @(
                 "-i", $inputPath,
                 "-c:v", $Encoder,
-                "-crf", (51 - [math]::Round($Quality * 51 / 100))
+                "-crf", (51 - [math]::Round($Quality * 51 / 100)),
+                "-frames:v", "1"                                      # Encode as single image
             )
 
-            # Set pixel format
+            # Set pixel format (use JPEG range for HEIC)
             if ($actualBitDepth -eq 10) {
                 $ffmpegArgs += "-pix_fmt", "yuv${actualChromaSubsampling}p10le"
             } else {
-                $ffmpegArgs += "-pix_fmt", "yuv${actualChromaSubsampling}p"
+                # Use yuvj format (JPEG/full range) for better compatibility with HEIC viewers
+                $ffmpegArgs += "-pix_fmt", "yuvj${actualChromaSubsampling}p"
             }
 
             # Add metadata handling
@@ -422,21 +484,40 @@ if ($ParallelJobs -eq 1) {
                 $ffmpegArgs += "-map_metadata", "-1"
             }
 
-            # Add HEIC/HEIF specific parameters
-            if ($OutputFormat -eq "heic" -or $OutputFormat -eq "heif") {
-                $ffmpegArgs += "-tag:v", "hvc1"
-                $ffmpegArgs += "-f", "mov"
-                $ffmpegArgs += "-movflags", "faststart"
+            # Add format-specific parameters
+            if ($OutputFormat -eq "avif") {
+                # AVIF - Proper image format with AV1 compression
+                $ffmpegArgs += "-c:v", "libaom-av1"                # Use libaom AV1 encoder
+                $ffmpegArgs += "-still-picture", "1"               # Encode as still image (not video)
+                $ffmpegArgs += "-f", "avif"                        # AVIF image format
+            } elseif ($OutputFormat -eq "heic") {
+                # Will use libheif instead of ffmpeg
+                $useLibheif = $true
             }
 
-            # Add output path
-            $ffmpegArgs += "-y", $outputPath
-
             # Run conversion
-            $ffmpegOutput = & ffmpeg @ffmpegArgs 2>&1 | Out-String
+            if ($useLibheif) {
+                # Use libheif for proper HEIC encoding
+                $conversionResult = ConvertTo-HEIC -InputPath $inputPath `
+                    -OutputPath $outputPath `
+                    -Quality $Quality `
+                    -ChromaSubsampling $actualChromaSubsampling `
+                    -BitDepth $actualBitDepth `
+                    -PreserveMetadata $PreserveMetadata
+
+                $conversionSuccess = $conversionResult.Success
+                $conversionOutput = $conversionResult.Output
+            } else {
+                # Add output path for FFmpeg
+                $ffmpegArgs += "-y", $outputPath
+
+                # Use FFmpeg for AVIF and other formats
+                $conversionOutput = & ffmpeg @ffmpegArgs 2>&1 | Out-String
+                $conversionSuccess = ($LASTEXITCODE -eq 0)
+            }
 
             # Check if conversion succeeded
-            if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $outputPath)) {
+            if ($conversionSuccess -and (Test-Path -LiteralPath $outputPath)) {
                 Start-Sleep -Milliseconds 100
 
                 $outputFile = Get-Item -LiteralPath $outputPath -Force

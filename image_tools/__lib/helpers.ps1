@@ -225,6 +225,87 @@ function Test-HEICEncodingSupport {
     }
 }
 
+function Test-LibheifAvailable {
+    try {
+        $null = & heif-enc --version 2>&1
+        return $LASTEXITCODE -eq 0
+    } catch {
+        return $false
+    }
+}
+
+function Test-AVIFEncodingSupport {
+    try {
+        # Check if AV1 encoder and AVIF format are available
+        $encoders = & ffmpeg -encoders 2>&1 | Out-String
+        $formats = & ffmpeg -formats 2>&1 | Out-String
+        return ($encoders -match 'libaom-av1') -and ($formats -match 'avif')
+    } catch {
+        return $false
+    }
+}
+
+# ============================================================================
+# ENCODING FUNCTIONS
+# ============================================================================
+
+function ConvertTo-HEIC {
+    param(
+        [string]$InputPath,
+        [string]$OutputPath,
+        [int]$Quality,
+        [string]$ChromaSubsampling,
+        [int]$BitDepth,
+        [bool]$PreserveMetadata
+    )
+
+    try {
+        # Build heif-enc arguments
+        # heif-enc uses quality 0-100 (higher = better)
+        $heifArgs = @(
+            "-q", $Quality
+        )
+
+        # Add chroma subsampling
+        if ($ChromaSubsampling -eq "444") {
+            $heifArgs += "-C", "444"
+        } elseif ($ChromaSubsampling -eq "422") {
+            $heifArgs += "-C", "422"
+        } else {
+            $heifArgs += "-C", "420"
+        }
+
+        # Add bit depth
+        if ($BitDepth -eq 10) {
+            $heifArgs += "-b", "10"
+        } else {
+            $heifArgs += "-b", "8"
+        }
+
+        # Add EXIF metadata handling
+        if ($PreserveMetadata) {
+            $heifArgs += "-E"
+        }
+
+        # Add input and output
+        $heifArgs += "-o", $OutputPath
+        $heifArgs += $InputPath
+
+        # Run heif-enc
+        $output = & heif-enc @heifArgs 2>&1 | Out-String
+
+        return @{
+            Success = ($LASTEXITCODE -eq 0)
+            Output = $output
+        }
+    } catch {
+        return @{
+            Success = $false
+            Output = $_.Exception.Message
+        }
+    }
+}
+
 # ============================================================================
 # QUALITY ANALYSIS FUNCTIONS
 # ============================================================================

@@ -471,8 +471,8 @@ function Show-ImageConversionUI {
                             FontSize="13"
                             Padding="12,10"
                             Margin="0,0,0,24">
-                        <ComboBoxItem Content="HEIC (.heic)"/>
-                        <ComboBoxItem Content="HEIF (.heif)"/>
+                        <ComboBoxItem Content="AVIF - Modern (Recommended)"/>
+                        <ComboBoxItem Content="HEIC - Apple Compatible (Requires libheif)"/>
                     </ComboBox>
 
                         <!-- Quality -->
@@ -714,7 +714,7 @@ public class WindowHelper {
     })
 
     # Set default values
-    $formatCombo.SelectedIndex = if ($OutputFormat -eq "heif") { 1 } else { 0 }
+    $formatCombo.SelectedIndex = if ($OutputFormat -eq "avif") { 0 } else { 1 }
 
     # Set quality slider to default
     $qualitySlider.Value = $DefaultQuality
@@ -757,7 +757,7 @@ public class WindowHelper {
     $startButton.Add_Click({
         $script:result = @{
             Start = $true
-            OutputFormat = if ($formatCombo.SelectedIndex -eq 1) { "heif" } else { "heic" }
+            OutputFormat = if ($formatCombo.SelectedIndex -eq 0) { "avif" } else { "heic" }
             Quality = [int]$qualitySlider.Value
             ChromaSubsampling = switch ($chromaCombo.SelectedIndex) {
                 0 { "source" }  # Same as source

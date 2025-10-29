@@ -37,11 +37,13 @@ $FileExtensions = @(
 # OUTPUT FORMAT SETTINGS
 # ============================================================================
 
-# Output Format: "heic" or "heif" (both are the same, just different extensions)
-$OutputFormat = "heic"            # Choose "heic" or "heif"
+# Output Format: "avif" (recommended) or "heic"
+# IMPORTANT: FFmpeg cannot create proper HEIC images (only HEVC videos with .heic extension)
+# Use AVIF for true image format with better compression and compatibility
+$OutputFormat = "avif"            # Choose "avif" (recommended) or "heic"
 
 # Output Extension
-$OutputExtension = ".heic"        # Will be set based on $OutputFormat
+$OutputExtension = ".avif"        # Will be set based on $OutputFormat
 
 # ============================================================================
 # QUALITY SETTINGS
