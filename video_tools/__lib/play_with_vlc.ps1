@@ -82,7 +82,6 @@ Write-Host "[INFO] Window size: ${windowWidth}x${windowHeight}" -ForegroundColor
 # VLC ARGUMENTS FOR OPTIMAL COMPARISON
 # ============================================================================
 # --no-one-instance: Allow multiple VLC windows
-# --video-on-top: Keep window on top
 # --no-video-title-show: Hide filename overlay
 # --no-osd: Disable on-screen display messages
 # --loop: Loop video playback
@@ -91,7 +90,6 @@ Write-Host "[INFO] Window size: ${windowWidth}x${windowHeight}" -ForegroundColor
 
 $vlcArgsLeft = @(
     "--no-one-instance",
-    "--video-on-top",
     "--no-video-title-show",
     "--no-osd",
     "--loop",
@@ -104,7 +102,6 @@ $vlcArgsLeft = @(
 
 $vlcArgsRight = @(
     "--no-one-instance",
-    "--video-on-top",
     "--no-video-title-show",
     "--no-osd",
     "--loop",
@@ -129,4 +126,8 @@ Write-Host "$Video2" -ForegroundColor White
 Start-Process -FilePath $VlcPath -ArgumentList $vlcArgsRight -WindowStyle Normal
 
 Write-Host "`n[SUCCESS] Both videos launched side-by-side" -ForegroundColor Green
-Write-Host "          Press ESC in VLC to exit fullscreen mode if needed" -ForegroundColor DarkGray
+Write-Host "Press ESC in VLC to exit fullscreen mode if needed" -ForegroundColor DarkGray
+
+# Keep terminal open
+Write-Host "Press any key to exit..." -ForegroundColor Yellow
+$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")

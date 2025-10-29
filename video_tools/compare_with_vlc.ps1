@@ -14,7 +14,7 @@ $inputDir = Join-Path $base "_input_files"
 
 # Load configuration to get file extensions
 if (-not (Test-Path $configPath)) {
-    Write-Host "`n❌ Could not find config.ps1 at $configPath" -ForegroundColor Red
+    Write-Host "`n  Could not find config.ps1 at $configPath" -ForegroundColor Red
     exit 1
 }
 
@@ -26,7 +26,7 @@ $videoExtensions = $FileExtensions | ForEach-Object { $_ -replace '^\*', '' }
 
 # Validate play_with_vlc.ps1 exists
 if (-not (Test-Path $scriptPath)) {
-    Write-Host "`n❌ Could not find play_with_vlc.ps1 at $scriptPath" -ForegroundColor Red
+    Write-Host "`n  Could not find play_with_vlc.ps1 at $scriptPath" -ForegroundColor Red
     exit 1
 }
 
@@ -39,7 +39,7 @@ Write-Host "==================================================" -ForegroundColor
 $outputFiles = Get-ChildItem -Path $outputDir -File -ErrorAction SilentlyContinue | Where-Object { $videoExtensions -contains $_.Extension } | Sort-Object Name
 
 if ($outputFiles.Count -eq 0) {
-    Write-Host "`n❌ No video files found in _output_files directory" -ForegroundColor Red
+    Write-Host "`n  No video files found in _output_files directory" -ForegroundColor Red
     Write-Host "   Please convert some videos first" -ForegroundColor Yellow
     exit 1
 }
@@ -66,7 +66,7 @@ if ([string]::IsNullOrWhiteSpace($selection)) {
 
 $selectedIndex = $null
 if (-not [int]::TryParse($selection, [ref]$selectedIndex) -or $selectedIndex -lt 1 -or $selectedIndex -gt $outputFiles.Count) {
-    Write-Host "`n❌ Invalid selection. Please enter a number between 1 and $($outputFiles.Count)" -ForegroundColor Red
+    Write-Host "`n  Invalid selection. Please enter a number between 1 and $($outputFiles.Count)" -ForegroundColor Red
     exit 1
 }
 
@@ -103,7 +103,7 @@ foreach ($pattern in $searchPatterns) {
 }
 
 if (-not $sourceFile) {
-    Write-Host "`n❌ Could not find source file in _input_files matching: $outputBaseName" -ForegroundColor Red
+    Write-Host "`n  Could not find source file in _input_files matching: $outputBaseName" -ForegroundColor Red
     Write-Host "   Tried to find: $($searchPatterns -join ', ')" -ForegroundColor Yellow
     Write-Host "`nWould you like to manually specify the source file? (y/n): " -NoNewline -ForegroundColor Yellow
     $manual = Read-Host
@@ -112,7 +112,7 @@ if (-not $sourceFile) {
         $inputFiles = Get-ChildItem -Path $inputDir -File -ErrorAction SilentlyContinue | Where-Object { $videoExtensions -contains $_.Extension } | Sort-Object Name
 
         if ($inputFiles.Count -eq 0) {
-            Write-Host "`n❌ No video files found in _input_files directory" -ForegroundColor Red
+            Write-Host "`n  No video files found in _input_files directory" -ForegroundColor Red
             exit 1
         }
 
@@ -128,7 +128,7 @@ if (-not $sourceFile) {
         if ([int]::TryParse($sourceSelection, [ref]$sourceIndex) -and $sourceIndex -ge 1 -and $sourceIndex -le $inputFiles.Count) {
             $sourceFile = $inputFiles[$sourceIndex - 1]
         } else {
-            Write-Host "❌ Invalid selection" -ForegroundColor Red
+            Write-Host "  Invalid selection" -ForegroundColor Red
             exit 1
         }
     } else {
@@ -142,12 +142,12 @@ Write-Host "$($sourceFile.Name)" -ForegroundColor Green
 
 # Validate both files exist
 if (-not (Test-Path -LiteralPath $sourcePath)) {
-    Write-Host "`n❌ Source file not found: $sourcePath" -ForegroundColor Red
+    Write-Host "`n  Source file not found: $sourcePath" -ForegroundColor Red
     exit 1
 }
 
 if (-not (Test-Path -LiteralPath $outputPath)) {
-    Write-Host "`n❌ Output file not found: $outputPath" -ForegroundColor Red
+    Write-Host "`n  Output file not found: $outputPath" -ForegroundColor Red
     exit 1
 }
 
@@ -166,5 +166,5 @@ Write-Host "         Compression: $compressionRatio% of original" -ForegroundCol
 Write-Host "--------------------------------------------------" -ForegroundColor DarkGray
 
 # Call the main script (same PowerShell session)
-Write-Host "`n🎬 Launching VLC players..." -ForegroundColor Cyan
+Write-Host "`nLaunching VLC players..." -ForegroundColor Cyan
 & $scriptPath -Video1 $sourcePath -Video2 $outputPath
