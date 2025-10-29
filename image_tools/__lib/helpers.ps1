@@ -226,6 +226,19 @@ function Test-HEICEncodingSupport {
 }
 
 function Test-LibheifAvailable {
+    # Check if heif-enc is in __lib directory first
+    $scriptDir = Split-Path -Parent $PSScriptRoot
+    $localHeifEnc = Join-Path $scriptDir "__lib\heif-enc.exe"
+
+    if (Test-Path $localHeifEnc) {
+        # Add __lib to PATH for this session
+        $libDir = Join-Path $scriptDir "__lib"
+        if ($env:Path -notlike "*$libDir*") {
+            $env:Path += ";$libDir"
+        }
+    }
+
+    # Now check if heif-enc is available
     try {
         $null = & heif-enc --version 2>&1
         return $LASTEXITCODE -eq 0
