@@ -11,7 +11,8 @@ function Show-ImageConversionUI {
         [string]$ChromaSubsampling,
         [int]$BitDepth,
         [bool]$PreserveMetadata,
-        [bool]$SkipExistingFiles
+        [bool]$SkipExistingFiles,
+        [int]$ParallelJobs
     )
 
     Add-Type -AssemblyName PresentationFramework
@@ -332,6 +333,7 @@ function Show-ImageConversionUI {
                             <ContentPresenter
                                 Grid.Column="1"
                                 VerticalAlignment="Center"
+                                Margin="8,0,0,0"
                                 Content="{TemplateBinding Content}"/>
                         </Grid>
                         <ControlTemplate.Triggers>
@@ -527,7 +529,8 @@ function Show-ImageConversionUI {
                             FontSize="13"
                             Padding="12,10"
                             Margin="0,0,0,24">
-                        <ComboBoxItem Content="4:2:0 (Recommended)"/>
+                        <ComboBoxItem Content="Same as source (recommended)"/>
+                        <ComboBoxItem Content="4:2:0 (Most Compatible)"/>
                         <ComboBoxItem Content="4:2:2 (Better Color)"/>
                         <ComboBoxItem Content="4:4:4 (Best Quality)"/>
                     </ComboBox>
@@ -551,6 +554,45 @@ function Show-ImageConversionUI {
                             <ComboBoxItem Content="8-bit - Standard (smaller files, wider compatibility)"/>
                             <ComboBoxItem Content="10-bit - Enhanced (better gradients, HDR support)"/>
                         </ComboBox>
+
+                        <!-- Parallel Jobs -->
+                        <Grid Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock
+                                Grid.Column="0"
+                                Text="Parallel Jobs"
+                                FontFamily="Segoe UI Variable, Segoe UI"
+                                FontSize="14"
+                                FontWeight="SemiBold"
+                                Foreground="$textColor"
+                                VerticalAlignment="Center"/>
+                            <TextBlock
+                                x:Name="ParallelJobsValue"
+                                Grid.Column="1"
+                                Text="4"
+                                FontFamily="Segoe UI Variable, Segoe UI"
+                                FontSize="16"
+                                FontWeight="Bold"
+                                Foreground="$accentColor"
+                                VerticalAlignment="Center"/>
+                        </Grid>
+                        <Slider
+                            x:Name="ParallelJobsSlider"
+                            Style="{StaticResource ModernSlider}"
+                            Minimum="1"
+                            Maximum="16"
+                            Value="4"
+                            IsSnapToTickEnabled="True"
+                            TickFrequency="1"
+                            Margin="0,0,0,10"/>
+                        <Grid Margin="0,0,0,24">
+                            <TextBlock Text="Single (1)" FontFamily="Segoe UI Variable, Segoe UI" Foreground="$secondaryTextColor" FontSize="11" HorizontalAlignment="Left"/>
+                            <TextBlock Text="Balanced (4-8)" FontFamily="Segoe UI Variable, Segoe UI" Foreground="$secondaryTextColor" FontSize="11" HorizontalAlignment="Center"/>
+                            <TextBlock Text="Maximum (16)" FontFamily="Segoe UI Variable, Segoe UI" Foreground="$secondaryTextColor" FontSize="11" HorizontalAlignment="Right"/>
+                        </Grid>
 
                         <!-- Options -->
                         <TextBlock
@@ -659,6 +701,8 @@ public class WindowHelper {
     $qualityValue = $window.FindName("QualityValue")
     $chromaCombo = $window.FindName("ChromaCombo")
     $bitDepthCombo = $window.FindName("BitDepthCombo")
+    $parallelJobsSlider = $window.FindName("ParallelJobsSlider")
+    $parallelJobsValue = $window.FindName("ParallelJobsValue")
     $preserveMetadataCheck = $window.FindName("PreserveMetadataCheck")
     $skipExistingCheck = $window.FindName("SkipExistingCheck")
     $startButton = $window.FindName("StartButton")
@@ -684,13 +728,26 @@ public class WindowHelper {
     & $updateQualityLabel
 
     $chromaCombo.SelectedIndex = switch ($ChromaSubsampling) {
-        "422" { 1 }
-        "444" { 2 }
-        default { 0 }
+        "420" { 1 }
+        "422" { 2 }
+        "444" { 3 }
+        default { 0 }  # source
     }
 
     # Default to "Same as source" (index 0)
     $bitDepthCombo.SelectedIndex = 0
+
+    # Set parallel jobs slider to default
+    $parallelJobsSlider.Value = $ParallelJobs
+
+    # Update parallel jobs label
+    $updateParallelJobsLabel = {
+        $jobs = [int]$parallelJobsSlider.Value
+        $parallelJobsValue.Text = "$jobs"
+    }
+    $parallelJobsSlider.Add_ValueChanged($updateParallelJobsLabel)
+    & $updateParallelJobsLabel
+
     $preserveMetadataCheck.IsChecked = $PreserveMetadata
     $skipExistingCheck.IsChecked = $SkipExistingFiles
 
@@ -703,9 +760,11 @@ public class WindowHelper {
             OutputFormat = if ($formatCombo.SelectedIndex -eq 1) { "heif" } else { "heic" }
             Quality = [int]$qualitySlider.Value
             ChromaSubsampling = switch ($chromaCombo.SelectedIndex) {
-                1 { "422" }
-                2 { "444" }
-                default { "420" }
+                0 { "source" }  # Same as source
+                1 { "420" }     # 4:2:0
+                2 { "422" }     # 4:2:2
+                3 { "444" }     # 4:4:4
+                default { "source" }
             }
             BitDepth = switch ($bitDepthCombo.SelectedIndex) {
                 0 { "source" }  # Same as source
@@ -713,6 +772,7 @@ public class WindowHelper {
                 2 { 10 }        # 10-bit
                 default { "source" }
             }
+            ParallelJobs = [int]$parallelJobsSlider.Value
             PreserveMetadata = $preserveMetadataCheck.IsChecked
             SkipExistingFiles = $skipExistingCheck.IsChecked
         }

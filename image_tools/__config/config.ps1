@@ -66,11 +66,12 @@ $QualityPresets = @{
 # ============================================================================
 
 # Chroma Subsampling
-# Options: "420", "422", "444"
-# 420 = Most compatible, smaller files (recommended)
+# Options: "source", "420", "422", "444"
+# source = Same as source image (recommended)
+# 420 = Most compatible, smaller files
 # 422 = Better color accuracy
 # 444 = No chroma subsampling, best quality
-$ChromaSubsampling = "420"
+$ChromaSubsampling = "source"
 
 # Bit Depth
 # Options: 8, 10
@@ -92,3 +93,10 @@ $PreserveMetadata = $true         # Set to $true to preserve metadata, $false to
 # HEIC Encoder
 # Options: "libx265" (most compatible)
 $Encoder = "libx265"
+
+# Parallel Processing
+# Number of concurrent conversion jobs (1-16)
+# Recommended: Number of CPU cores or half of CPU cores
+# Higher values = faster batch processing but more CPU/memory usage
+# Default: 4 (good balance for most systems)
+$ParallelJobs = 4

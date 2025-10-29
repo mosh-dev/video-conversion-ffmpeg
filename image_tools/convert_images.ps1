@@ -91,7 +91,8 @@ $settings = Show-ImageConversionUI -OutputFormat $OutputFormat `
     -ChromaSubsampling $ChromaSubsampling `
     -BitDepth $BitDepth `
     -PreserveMetadata $PreserveMetadata `
-    -SkipExistingFiles $SkipExistingFiles
+    -SkipExistingFiles $SkipExistingFiles `
+    -ParallelJobs $ParallelJobs
 
 if (-not $settings -or -not $settings.Start) {
     Write-Host "[INFO] Conversion cancelled by user" -ForegroundColor Yellow
@@ -105,6 +106,7 @@ $ChromaSubsampling = $settings.ChromaSubsampling
 $BitDepth = $settings.BitDepth
 $PreserveMetadata = $settings.PreserveMetadata
 $SkipExistingFiles = $settings.SkipExistingFiles
+$ParallelJobs = $settings.ParallelJobs
 
 # Set output extension based on format
 $OutputExtension = ".$OutputFormat"
@@ -132,6 +134,7 @@ if ($BitDepth -eq "source") {
 }
 Write-Log -Message "  Preserve Metadata: $PreserveMetadata" -LogFile $LogFile -Color "White"
 Write-Log -Message "  Skip Existing: $SkipExistingFiles" -LogFile $LogFile -Color "White"
+Write-Log -Message "  Parallel Jobs: $ParallelJobs" -LogFile $LogFile -Color "White"
 Write-Log -Message "" -LogFile $LogFile
 Write-Log -Message "Input Directory:  $InputDir" -LogFile $LogFile -Color "White"
 Write-Log -Message "Output Directory: $OutputDir" -LogFile $LogFile -Color "White"
@@ -172,9 +175,25 @@ $FailCount = 0
 $TotalOriginalSize = 0
 $TotalConvertedSize = 0
 
-Write-LogSection -Title "PROCESSING IMAGES" -LogFile $LogFile
+# Array to collect quality reports for all conversions
+$qualityReports = [System.Collections.ArrayList]::Synchronized((New-Object System.Collections.ArrayList))
 
-foreach ($inputFile in $inputFiles) {
+# Thread-safe counters
+$script:SuccessCount = 0
+$script:SkipCount = 0
+$script:FailCount = 0
+$script:TotalOriginalSize = 0
+$script:TotalConvertedSize = 0
+$syncLock = New-Object System.Object
+
+Write-LogSection -Title "PROCESSING IMAGES" -LogFile $LogFile
+Write-Log -Message "Parallel Jobs: $ParallelJobs" -LogFile $LogFile -Color "Cyan"
+Write-Log -Message "" -LogFile $LogFile
+
+# Decide processing method based on parallel jobs setting
+if ($ParallelJobs -eq 1) {
+    # Sequential processing
+    foreach ($inputFile in $inputFiles) {
     $CurrentFile++
     $inputPath = $inputFile.FullName
     $inputName = $inputFile.Name
@@ -211,6 +230,14 @@ foreach ($inputFile in $inputFiles) {
         $actualBitDepth = $BitDepth
     }
 
+    # Determine actual chroma subsampling to use
+    if ($ChromaSubsampling -eq "source") {
+        $actualChromaSubsampling = Get-ImageChromaSubsampling -ImagePath $inputPath
+        Write-Log -Message "  Detected source chroma subsampling: $actualChromaSubsampling" -LogFile $LogFile -Color "DarkGray"
+    } else {
+        $actualChromaSubsampling = $ChromaSubsampling
+    }
+
     # Build ffmpeg arguments
     $ffmpegArgs = @(
         "-i", $inputPath,
@@ -220,9 +247,9 @@ foreach ($inputFile in $inputFiles) {
 
     # Set pixel format based on bit depth
     if ($actualBitDepth -eq 10) {
-        $ffmpegArgs += "-pix_fmt", "yuv${ChromaSubsampling}p10le"
+        $ffmpegArgs += "-pix_fmt", "yuv${actualChromaSubsampling}p10le"
     } else {
-        $ffmpegArgs += "-pix_fmt", "yuv${ChromaSubsampling}p"
+        $ffmpegArgs += "-pix_fmt", "yuv${actualChromaSubsampling}p"
     }
 
     # Add metadata handling
@@ -230,6 +257,13 @@ foreach ($inputFile in $inputFiles) {
         $ffmpegArgs += "-map_metadata", "0"
     } else {
         $ffmpegArgs += "-map_metadata", "-1"
+    }
+
+    # Add HEIC/HEIF specific parameters
+    if ($OutputFormat -eq "heic" -or $OutputFormat -eq "heif") {
+        $ffmpegArgs += "-tag:v", "hvc1"        # Set codec tag for HEIC/HEIF compliance
+        $ffmpegArgs += "-f", "mov"             # Use MOV container format
+        $ffmpegArgs += "-movflags", "faststart" # Optimize for compatibility
     }
 
     # Add output path
@@ -261,10 +295,7 @@ foreach ($inputFile in $inputFiles) {
             if ($qualityMetrics.Success) {
                 Write-Log -Message "  Quality Metrics: SSIM=$($qualityMetrics.SSIM.ToString("0.0000")), PSNR=$($qualityMetrics.PSNR.ToString("0.00")) dB" -LogFile $LogFile -Color "Cyan"
 
-                # Save quality report as JSON
-                $reportBaseName = [System.IO.Path]::GetFileNameWithoutExtension($outputFile.Name)
-                $reportPath = Join-Path $ReportDir "${reportBaseName}_quality.json"
-
+                # Add to quality reports array
                 $conversionData = @{
                     SourceFile = $inputName
                     OutputFile = $outputFile.Name
@@ -272,14 +303,17 @@ foreach ($inputFile in $inputFiles) {
                     OutputSize = $outputSize
                     CompressionRatio = $compressionRatio
                     Quality = $Quality
-                    ChromaSubsampling = $ChromaSubsampling
-                    BitDepth = $BitDepth
+                    ChromaSubsampling = $actualChromaSubsampling
+                    BitDepth = $actualBitDepth
                     OutputFormat = $OutputFormat
-                    SSIM = $qualityMetrics.SSIM
-                    PSNR = $qualityMetrics.PSNR
+                    Timestamp = (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+                    Metrics = @{
+                        SSIM = $qualityMetrics.SSIM
+                        PSNR = $qualityMetrics.PSNR
+                    }
                 }
 
-                Save-QualityReport -ReportFile $reportPath -ConversionData $conversionData -LogFile $LogFile
+                $qualityReports += $conversionData
             }
 
             $SuccessCount++
@@ -294,6 +328,297 @@ foreach ($inputFile in $inputFiles) {
     }
 
     Write-Log -Message "" -LogFile $LogFile
+}
+} else {
+    # Parallel processing using runspace pool
+    Write-Log -Message "Using parallel processing with $ParallelJobs concurrent jobs..." -LogFile $LogFile -Color "Green"
+    Write-Log -Message "" -LogFile $LogFile
+
+    # Create runspace pool
+    $RunspacePool = [runspacefactory]::CreateRunspacePool(1, $ParallelJobs)
+    $RunspacePool.Open()
+
+    # Define the conversion scriptblock
+    $ConversionScriptBlock = {
+        param(
+            $InputFile,
+            $FileIndex,
+            $TotalFiles,
+            $OutputDir,
+            $OutputExtension,
+            $SkipExistingFiles,
+            $BitDepth,
+            $ChromaSubsampling,
+            $Encoder,
+            $Quality,
+            $PreserveMetadata,
+            $OutputFormat,
+            $LogFile,
+            $HelpersPath
+        )
+
+        # Load helper functions
+        . $HelpersPath
+
+        $result = @{
+            Index = $FileIndex
+            InputName = $InputFile.Name
+            InputPath = $InputFile.FullName
+            InputSize = $InputFile.Length
+            Status = "Processing"
+            Message = ""
+            OutputSize = 0
+            OutputPath = ""
+            QualityMetrics = $null
+        }
+
+        try {
+            $inputPath = $InputFile.FullName
+            $inputName = $InputFile.Name
+
+            # Get safe output path
+            $outputPath = Get-SafeOutputPath -InputPath $inputPath -OutputDir $OutputDir -OutputExtension $OutputExtension
+            $result.OutputPath = $outputPath
+
+            # Check if output already exists
+            if ($SkipExistingFiles -and (Test-Path -LiteralPath $outputPath)) {
+                $result.Status = "Skipped"
+                $result.Message = "Output file already exists"
+                return $result
+            }
+
+            # Determine actual bit depth
+            if ($BitDepth -eq "source") {
+                $actualBitDepth = Get-ImageBitDepth -ImagePath $inputPath
+            } else {
+                $actualBitDepth = $BitDepth
+            }
+
+            # Determine actual chroma subsampling
+            if ($ChromaSubsampling -eq "source") {
+                $actualChromaSubsampling = Get-ImageChromaSubsampling -ImagePath $inputPath
+            } else {
+                $actualChromaSubsampling = $ChromaSubsampling
+            }
+
+            # Build ffmpeg arguments
+            $ffmpegArgs = @(
+                "-i", $inputPath,
+                "-c:v", $Encoder,
+                "-crf", (51 - [math]::Round($Quality * 51 / 100))
+            )
+
+            # Set pixel format
+            if ($actualBitDepth -eq 10) {
+                $ffmpegArgs += "-pix_fmt", "yuv${actualChromaSubsampling}p10le"
+            } else {
+                $ffmpegArgs += "-pix_fmt", "yuv${actualChromaSubsampling}p"
+            }
+
+            # Add metadata handling
+            if ($PreserveMetadata) {
+                $ffmpegArgs += "-map_metadata", "0"
+            } else {
+                $ffmpegArgs += "-map_metadata", "-1"
+            }
+
+            # Add HEIC/HEIF specific parameters
+            if ($OutputFormat -eq "heic" -or $OutputFormat -eq "heif") {
+                $ffmpegArgs += "-tag:v", "hvc1"
+                $ffmpegArgs += "-f", "mov"
+                $ffmpegArgs += "-movflags", "faststart"
+            }
+
+            # Add output path
+            $ffmpegArgs += "-y", $outputPath
+
+            # Run conversion
+            $ffmpegOutput = & ffmpeg @ffmpegArgs 2>&1 | Out-String
+
+            # Check if conversion succeeded
+            if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $outputPath)) {
+                Start-Sleep -Milliseconds 100
+
+                $outputFile = Get-Item -LiteralPath $outputPath -Force
+                $result.OutputSize = $outputFile.Length
+
+                $compressionRatio = [math]::Round(($result.OutputSize / $result.InputSize) * 100, 1)
+
+                # Perform quality analysis
+                $qualityMetrics = Measure-ImageQuality -SourceImage $inputPath -ConvertedImage $outputPath -LogFile $LogFile
+
+                if ($qualityMetrics.Success) {
+                    $result.QualityMetrics = @{
+                        SSIM = $qualityMetrics.SSIM
+                        PSNR = $qualityMetrics.PSNR
+                        ActualBitDepth = $actualBitDepth
+                        ActualChromaSubsampling = $actualChromaSubsampling
+                        CompressionRatio = $compressionRatio
+                    }
+                }
+
+                $result.Status = "Success"
+                $result.Message = "Compression: $compressionRatio% of original"
+            } else {
+                $result.Status = "Failed"
+                $result.Message = "Conversion failed: $ffmpegOutput"
+            }
+        } catch {
+            $result.Status = "Failed"
+            $result.Message = "Error: $_"
+        }
+
+        return $result
+    }
+
+    # Create jobs
+    $Jobs = @()
+    $CurrentFile = 0
+
+    foreach ($inputFile in $inputFiles) {
+        $CurrentFile++
+
+        $PowerShell = [PowerShell]::Create()
+        $PowerShell.RunspacePool = $RunspacePool
+
+        [void]$PowerShell.AddScript($ConversionScriptBlock)
+        [void]$PowerShell.AddArgument($inputFile)
+        [void]$PowerShell.AddArgument($CurrentFile)
+        [void]$PowerShell.AddArgument($TotalFiles)
+        [void]$PowerShell.AddArgument($OutputDir)
+        [void]$PowerShell.AddArgument($OutputExtension)
+        [void]$PowerShell.AddArgument($SkipExistingFiles)
+        [void]$PowerShell.AddArgument($BitDepth)
+        [void]$PowerShell.AddArgument($ChromaSubsampling)
+        [void]$PowerShell.AddArgument($Encoder)
+        [void]$PowerShell.AddArgument($Quality)
+        [void]$PowerShell.AddArgument($PreserveMetadata)
+        [void]$PowerShell.AddArgument($OutputFormat)
+        [void]$PowerShell.AddArgument($LogFile)
+        [void]$PowerShell.AddArgument($HelpersPath)
+
+        $Jobs += @{
+            PowerShell = $PowerShell
+            Handle = $PowerShell.BeginInvoke()
+            InputFile = $inputFile
+        }
+    }
+
+    # Process completed jobs
+    Write-Log -Message "Processing $($Jobs.Count) images..." -LogFile $LogFile -Color "Cyan"
+
+    $CompletedCount = 0
+    while ($CompletedCount -lt $Jobs.Count) {
+        foreach ($Job in $Jobs) {
+            if ($Job.Handle.IsCompleted -and -not $Job.Processed) {
+                $Job.Processed = $true
+                $CompletedCount++
+
+                try {
+                    $result = $Job.PowerShell.EndInvoke($Job.Handle)
+
+                    if ($result) {
+                        Write-Log -Message "[$($result.Index)/$TotalFiles] $($result.InputName)" -LogFile $LogFile -Color "Cyan"
+
+                        if ($result.Status -eq "Success") {
+                            $TotalOriginalSize += $result.InputSize
+                            $TotalConvertedSize += $result.OutputSize
+                            $SuccessCount++
+
+                            Write-Log -Message "  [SUCCESS] $($result.Message)" -LogFile $LogFile -Color "Green"
+
+                            if ($result.QualityMetrics) {
+                                $metrics = $result.QualityMetrics
+                                Write-Log -Message "  Quality: SSIM=$($metrics.SSIM.ToString("0.0000")), PSNR=$($metrics.PSNR.ToString("0.00")) dB" -LogFile $LogFile -Color "Cyan"
+
+                                # Add to quality reports
+                                $conversionData = @{
+                                    SourceFile = $result.InputName
+                                    OutputFile = (Split-Path -Leaf $result.OutputPath)
+                                    SourceSize = $result.InputSize
+                                    OutputSize = $result.OutputSize
+                                    CompressionRatio = $metrics.CompressionRatio
+                                    Quality = $Quality
+                                    ChromaSubsampling = $metrics.ActualChromaSubsampling
+                                    BitDepth = $metrics.ActualBitDepth
+                                    OutputFormat = $OutputFormat
+                                    Timestamp = (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+                                    Metrics = @{
+                                        SSIM = $metrics.SSIM
+                                        PSNR = $metrics.PSNR
+                                    }
+                                }
+
+                                [void]$qualityReports.Add($conversionData)
+                            }
+                        } elseif ($result.Status -eq "Skipped") {
+                            $SkipCount++
+                            Write-Log -Message "  [SKIP] $($result.Message)" -LogFile $LogFile -Color "Yellow"
+                        } else {
+                            $FailCount++
+                            Write-Log -Message "  [FAILED] $($result.Message)" -LogFile $LogFile -Color "Red"
+                        }
+
+                        Write-Log -Message "" -LogFile $LogFile
+                    }
+                } catch {
+                    $FailCount++
+                    Write-Log -Message "  [ERROR] Failed to process job: $_" -LogFile $LogFile -Color "Red"
+                    Write-Log -Message "" -LogFile $LogFile
+                }
+
+                $Job.PowerShell.Dispose()
+            }
+        }
+
+        Start-Sleep -Milliseconds 100
+    }
+
+    # Clean up
+    $RunspacePool.Close()
+    $RunspacePool.Dispose()
+
+    Write-Log -Message "Parallel processing completed" -LogFile $LogFile -Color "Green"
+    Write-Log -Message "" -LogFile $LogFile
+}
+
+# ============================================================================
+# SAVE QUALITY REPORT
+# ============================================================================
+
+if ($qualityReports.Count -gt 0) {
+    $reportFileName = "conversion_$Timestamp.json"
+    $reportPath = Join-Path $ReportDir $reportFileName
+
+    $batchReport = @{
+        ConversionDate = (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+        Settings = @{
+            Quality = $Quality
+            OutputFormat = $OutputFormat
+            ChromaSubsampling = $ChromaSubsampling
+            BitDepth = $BitDepth
+            PreserveMetadata = $PreserveMetadata
+            ParallelJobs = $ParallelJobs
+        }
+        Summary = @{
+            TotalFiles = $TotalFiles
+            SuccessCount = $SuccessCount
+            SkipCount = $SkipCount
+            FailCount = $FailCount
+            TotalOriginalSize = $TotalOriginalSize
+            TotalConvertedSize = $TotalConvertedSize
+        }
+        Conversions = $qualityReports
+    }
+
+    try {
+        $jsonContent = $batchReport | ConvertTo-Json -Depth 10
+        [System.IO.File]::WriteAllText($reportPath, $jsonContent, [System.Text.UTF8Encoding]::new($false))
+        Write-Log -Message "" -LogFile $LogFile
+        Write-Log -Message "Quality report saved: $reportFileName" -LogFile $LogFile -Color "Green"
+    } catch {
+        Write-Log -Message "Failed to save quality report: $_" -LogFile $LogFile -Color "Red"
+    }
 }
 
 # ============================================================================

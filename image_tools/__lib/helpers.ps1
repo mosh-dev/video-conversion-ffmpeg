@@ -125,6 +125,33 @@ function Get-ImageBitDepth {
     return 8
 }
 
+function Get-ImageChromaSubsampling {
+    param([string]$ImagePath)
+
+    try {
+        # Use ffprobe to get pixel format
+        $ffprobeOutput = & ffprobe -v error -select_streams v:0 -show_entries stream=pix_fmt -of default=noprint_wrappers=1:nokey=1 $ImagePath 2>&1
+
+        if ($ffprobeOutput) {
+            $pixFmt = $ffprobeOutput.ToString().Trim()
+
+            # Detect chroma subsampling from pixel format
+            if ($pixFmt -match 'yuv444|rgb|gbrp') {
+                return "444"
+            } elseif ($pixFmt -match 'yuv422|yuyv422') {
+                return "422"
+            } elseif ($pixFmt -match 'yuv420|yuvj420') {
+                return "420"
+            }
+        }
+    } catch {
+        # Default to 4:2:0 if detection fails
+        return "420"
+    }
+
+    return "420"
+}
+
 # ============================================================================
 # CONVERSION STATISTICS
 # ============================================================================
