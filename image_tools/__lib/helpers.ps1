@@ -410,11 +410,30 @@ function Get-QualityRating {
         default      { "White" }
     }
 
+    # Get individual colors for SSIM and PSNR
+    $ssimColor = switch ($ssimRating) {
+        "Excellent"  { "Green" }
+        "Very Good"  { "Cyan" }
+        "Acceptable" { "Yellow" }
+        "Poor"       { "Red" }
+        default      { "White" }
+    }
+
+    $psnrColor = switch ($psnrRating) {
+        "Excellent"  { "Green" }
+        "Very Good"  { "Cyan" }
+        "Acceptable" { "Yellow" }
+        "Poor"       { "Red" }
+        default      { "White" }
+    }
+
     return @{
         OverallRating = $overallRating
         SSIMRating = $ssimRating
         PSNRRating = $psnrRating
         Color = $color
+        SSIMColor = $ssimColor
+        PSNRColor = $psnrColor
     }
 }
 

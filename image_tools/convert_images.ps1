@@ -427,9 +427,18 @@ if ($ParallelJobs -eq 1) {
                 # Get quality rating and color
                 $qualityRating = Get-QualityRating -SSIM $qualityMetrics.SSIM -PSNR $qualityMetrics.PSNR
 
-                # Format quality metrics with rating
-                $qualityMessage = "  Quality: SSIM=$($qualityMetrics.SSIM.ToString("0.0000")) [$($qualityRating.SSIMRating)], PSNR=$($qualityMetrics.PSNR.ToString("0.00")) dB [$($qualityRating.PSNRRating)] - Overall: $($qualityRating.OverallRating)"
-                Write-Log -Message $qualityMessage -LogFile $LogFile -Color $qualityRating.Color
+                # Format quality metrics with individual colors for each metric value
+                $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+                Write-Host "[$timestamp] " -NoNewline -ForegroundColor DarkGray
+                Write-Host "  Quality: SSIM=" -NoNewline -ForegroundColor White
+                Write-Host $qualityMetrics.SSIM.ToString("0.0000") -NoNewline -ForegroundColor $qualityRating.SSIMColor
+                Write-Host ", PSNR=" -NoNewline -ForegroundColor White
+                Write-Host "$($qualityMetrics.PSNR.ToString("0.00")) dB" -ForegroundColor $qualityRating.PSNRColor
+
+                # Log to file (plain text)
+                $qualityMessage = "  Quality: SSIM=$($qualityMetrics.SSIM.ToString("0.0000")), PSNR=$($qualityMetrics.PSNR.ToString("0.00")) dB"
+                $logMessage = "[$timestamp] $qualityMessage"
+                [System.IO.File]::AppendAllText($LogFile, "$logMessage`n", [System.Text.UTF8Encoding]::new($false))
 
                 # Add to quality reports array
                 $conversionData = @{
@@ -712,9 +721,18 @@ if ($ParallelJobs -eq 1) {
                                 # Get quality rating and color
                                 $qualityRating = Get-QualityRating -SSIM $metrics.SSIM -PSNR $metrics.PSNR
 
-                                # Format quality metrics with rating
-                                $qualityMessage = "  Quality: SSIM=$($metrics.SSIM.ToString("0.0000")) [$($qualityRating.SSIMRating)], PSNR=$($metrics.PSNR.ToString("0.00")) dB [$($qualityRating.PSNRRating)] - Overall: $($qualityRating.OverallRating)"
-                                Write-Log -Message $qualityMessage -LogFile $LogFile -Color $qualityRating.Color
+                                # Format quality metrics with individual colors for each metric value
+                                $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+                                Write-Host "[$timestamp] " -NoNewline -ForegroundColor DarkGray
+                                Write-Host "  Quality: SSIM=" -NoNewline -ForegroundColor White
+                                Write-Host $metrics.SSIM.ToString("0.0000") -NoNewline -ForegroundColor $qualityRating.SSIMColor
+                                Write-Host ", PSNR=" -NoNewline -ForegroundColor White
+                                Write-Host "$($metrics.PSNR.ToString("0.00")) dB" -ForegroundColor $qualityRating.PSNRColor
+
+                                # Log to file (plain text)
+                                $qualityMessage = "  Quality: SSIM=$($metrics.SSIM.ToString("0.0000")), PSNR=$($metrics.PSNR.ToString("0.00")) dB"
+                                $logMessage = "[$timestamp] $qualityMessage"
+                                [System.IO.File]::AppendAllText($LogFile, "$logMessage`n", [System.Text.UTF8Encoding]::new($false))
 
                                 # Add to quality reports
                                 $conversionData = @{
