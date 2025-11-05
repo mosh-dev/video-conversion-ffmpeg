@@ -1,16 +1,21 @@
 # CLAUDE.md
 
-Video conversion workspace for batch converting videos to AV1/HEVC using ffmpeg with hardware acceleration, GUI launcher, VMAF quality preview, and multi-metric validation.
+FFmpeg PowerShell Tools - Batch media processing suite with two main components:
+1. **video_tools/** - Video conversion with AV1/HEVC encoding, hardware acceleration, VMAF quality preview, and validation
+2. **image_tools/** - Image conversion to HEIC/AVIF with bundled libheif encoder
 
-## Architecture
+This document focuses on **video_tools** implementation details. For image_tools, see `image_tools/README.md`.
+
+## Video Tools Architecture
 
 **Main Scripts:**
 - `convert_videos.ps1` - Main conversion with VMAF quality preview
 - `analyze_quality.ps1` - Quality validation (VMAF/SSIM/PSNR)
 - `view_reports.ps1` - JSON report viewer
+- `compare_with_vlc.ps1` - Side-by-side VLC comparison launcher
 
 **Config:** `__config/` - config.ps1, codec_mappings.ps1, quality_analyzer_config.ps1
-**Helpers:** `__lib/` - helpers.ps1, quality_preview_helper.ps1, show_conversion_ui.ps1, show_quality_analyzer_ui.ps1
+**Helpers:** `__lib/` - helpers.ps1, ffmpeg_helpers.ps1, quality_preview_helper.ps1, show_conversion_ui.ps1, show_quality_analyzer_ui.ps1, play_with_vlc.ps1
 
 ## Key Design Patterns
 
@@ -142,4 +147,25 @@ video_tools/
 - Batch processing with progress tracking
 - Collision detection and prevention
 - Comprehensive logging and statistics
-- Quality validation tools with multiple metrics
+- Quality validation tools with multiple metrics (VMAF/SSIM/PSNR)
+- VLC side-by-side comparison for visual quality inspection
+
+## Image Tools (Brief Overview)
+
+**Location:** `image_tools/`
+**Purpose:** Batch image conversion to HEIC/AVIF formats
+**Key Features:**
+- AVIF encoding via FFmpeg (libaom-av1)
+- HEIC encoding via bundled libheif 1.20.2 (no separate installation needed)
+- GUI interface for parameter selection
+- 5-level quality presets
+- Parallel processing (configurable 1-16 jobs)
+- Metadata preservation
+- Chroma subsampling and bit depth control
+
+**Implementation Notes:**
+- libheif 1.20.2 Windows binaries bundled in `__lib/libheif-1.20.2-win64/`
+- heif-enc.exe used for HEIC encoding (50+ supporting DLLs included)
+- FFmpeg used for AVIF encoding (requires libaom-av1 support)
+- Config in `__config/config.ps1` (format, quality, parallel jobs, etc.)
+- For detailed implementation, see `image_tools/README.md`
