@@ -31,6 +31,58 @@ if (-not (Test-Path $HelpersPath)) {
 # Load helpers
 . $HelpersPath
 
+# ============================================================================
+# CLEANUP HANDLER FOR ORPHANED PROCESSES
+# ============================================================================
+
+# Function to kill all ffmpeg and heif-enc child processes
+function Stop-AllChildProcesses {
+    try {
+        $currentPID = $PID
+
+        # Kill all ffmpeg processes spawned by this script
+        $ffmpegProcesses = Get-WmiObject Win32_Process -Filter "Name = 'ffmpeg.exe'" -ErrorAction SilentlyContinue |
+            Where-Object { $_.ParentProcessId -eq $currentPID }
+
+        foreach ($proc in $ffmpegProcesses) {
+            try {
+                Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
+                Write-Host "[CLEANUP] Terminated ffmpeg process (PID: $($proc.ProcessId))" -ForegroundColor Yellow
+            } catch {
+                # Ignore errors during cleanup
+            }
+        }
+
+        # Kill all heif-enc processes spawned by this script
+        $heifProcesses = Get-WmiObject Win32_Process -Filter "Name = 'heif-enc.exe'" -ErrorAction SilentlyContinue |
+            Where-Object { $_.ParentProcessId -eq $currentPID }
+
+        foreach ($proc in $heifProcesses) {
+            try {
+                Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
+                Write-Host "[CLEANUP] Terminated heif-enc process (PID: $($proc.ProcessId))" -ForegroundColor Yellow
+            } catch {
+                # Ignore errors during cleanup
+            }
+        }
+    } catch {
+        # Ignore errors during cleanup
+    }
+}
+
+# Register cleanup handler for Ctrl+C and script exit
+$null = Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action {
+    Stop-AllChildProcesses
+}
+
+# Also handle Ctrl+C explicitly
+[Console]::TreatControlCAsInput = $false
+trap {
+    Write-Host "`n[INFO] Script interrupted, cleaning up..." -ForegroundColor Yellow
+    Stop-AllChildProcesses
+    break
+}
+
 # Resolve directories to absolute paths
 $InputDir = Resolve-Path $InputDir -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path
 $OutputDir = Resolve-Path $OutputDir -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path
@@ -125,6 +177,25 @@ $BitDepth = $settings.BitDepth
 $PreserveMetadata = $settings.PreserveMetadata
 $SkipExistingFiles = $settings.SkipExistingFiles
 $ParallelJobs = $settings.ParallelJobs
+
+# Auto-detect CPU cores if ParallelJobs is 0
+if ($ParallelJobs -eq 0) {
+    $cpuCores = (Get-CimInstance -ClassName Win32_Processor | Measure-Object -Property NumberOfLogicalProcessors -Sum).Sum
+    # Use 1/4 of CPU cores for conservative performance (minimum 1, maximum 3)
+    # Image encoding is VERY CPU-intensive, so we need to be conservative
+    $ParallelJobs = [Math]::Max(1, [Math]::Min(3, [Math]::Floor($cpuCores / 4)))
+    Write-Host "[INFO] Auto-detected $cpuCores CPU cores, using $ParallelJobs parallel jobs (conservative)" -ForegroundColor Cyan
+    Write-Host "[INFO] If system is still choppy, manually set parallel jobs to 1 in config.ps1" -ForegroundColor Yellow
+}
+
+# Set process priority to reduce system impact
+try {
+    $currentProcess = Get-Process -Id $PID
+    $currentProcess.PriorityClass = $ProcessPriority
+    Write-Host "[INFO] Process priority set to: $ProcessPriority" -ForegroundColor Cyan
+} catch {
+    Write-Host "[WARNING] Failed to set process priority: $_" -ForegroundColor Yellow
+}
 
 # Set output extension based on format
 $OutputExtension = ".$OutputFormat"
@@ -353,7 +424,12 @@ if ($ParallelJobs -eq 1) {
             $qualityMetrics = Measure-ImageQuality -SourceImage $inputPath -ConvertedImage $outputPath -LogFile $LogFile
 
             if ($qualityMetrics.Success) {
-                Write-Log -Message "  Quality Metrics: SSIM=$($qualityMetrics.SSIM.ToString("0.0000")), PSNR=$($qualityMetrics.PSNR.ToString("0.00")) dB" -LogFile $LogFile -Color "Cyan"
+                # Get quality rating and color
+                $qualityRating = Get-QualityRating -SSIM $qualityMetrics.SSIM -PSNR $qualityMetrics.PSNR
+
+                # Format quality metrics with rating
+                $qualityMessage = "  Quality: SSIM=$($qualityMetrics.SSIM.ToString("0.0000")) [$($qualityRating.SSIMRating)], PSNR=$($qualityMetrics.PSNR.ToString("0.00")) dB [$($qualityRating.PSNRRating)] - Overall: $($qualityRating.OverallRating)"
+                Write-Log -Message $qualityMessage -LogFile $LogFile -Color $qualityRating.Color
 
                 # Add to quality reports array
                 $conversionData = @{
@@ -552,47 +628,69 @@ if ($ParallelJobs -eq 1) {
         return $result
     }
 
-    # Create jobs
-    $Jobs = @()
+    # Create job queue with staggered starts to prevent system overload
+    $FileQueue = New-Object System.Collections.Queue
     $CurrentFile = 0
-
     foreach ($inputFile in $inputFiles) {
         $CurrentFile++
-
-        $PowerShell = [PowerShell]::Create()
-        $PowerShell.RunspacePool = $RunspacePool
-
-        [void]$PowerShell.AddScript($ConversionScriptBlock)
-        [void]$PowerShell.AddArgument($inputFile)
-        [void]$PowerShell.AddArgument($CurrentFile)
-        [void]$PowerShell.AddArgument($TotalFiles)
-        [void]$PowerShell.AddArgument($OutputDir)
-        [void]$PowerShell.AddArgument($OutputExtension)
-        [void]$PowerShell.AddArgument($SkipExistingFiles)
-        [void]$PowerShell.AddArgument($BitDepth)
-        [void]$PowerShell.AddArgument($ChromaSubsampling)
-        [void]$PowerShell.AddArgument($Encoder)
-        [void]$PowerShell.AddArgument($Quality)
-        [void]$PowerShell.AddArgument($PreserveMetadata)
-        [void]$PowerShell.AddArgument($OutputFormat)
-        [void]$PowerShell.AddArgument($LogFile)
-        [void]$PowerShell.AddArgument($HelpersPath)
-
-        $Jobs += @{
-            PowerShell = $PowerShell
-            Handle = $PowerShell.BeginInvoke()
-            InputFile = $inputFile
-        }
+        $FileQueue.Enqueue(@{
+            File = $inputFile
+            Index = $CurrentFile
+        })
     }
 
-    # Process completed jobs
-    Write-Log -Message "Processing $($Jobs.Count) images..." -LogFile $LogFile -Color "Cyan"
-
+    $ActiveJobs = [System.Collections.ArrayList]@()
     $CompletedCount = 0
-    while ($CompletedCount -lt $Jobs.Count) {
-        foreach ($Job in $Jobs) {
-            if ($Job.Handle.IsCompleted -and -not $Job.Processed) {
-                $Job.Processed = $true
+
+    Write-Log -Message "Processing $TotalFiles images with staggered job starts..." -LogFile $LogFile -Color "Cyan"
+
+    # Main processing loop - start jobs as slots become available
+    while ($CompletedCount -lt $TotalFiles) {
+        # Start new jobs if slots are available and files remain in queue
+        while ($ActiveJobs.Count -lt $ParallelJobs -and $FileQueue.Count -gt 0) {
+            $fileInfo = $FileQueue.Dequeue()
+
+            $PowerShell = [PowerShell]::Create()
+            $PowerShell.RunspacePool = $RunspacePool
+
+            [void]$PowerShell.AddScript($ConversionScriptBlock)
+            [void]$PowerShell.AddArgument($fileInfo.File)
+            [void]$PowerShell.AddArgument($fileInfo.Index)
+            [void]$PowerShell.AddArgument($TotalFiles)
+            [void]$PowerShell.AddArgument($OutputDir)
+            [void]$PowerShell.AddArgument($OutputExtension)
+            [void]$PowerShell.AddArgument($SkipExistingFiles)
+            [void]$PowerShell.AddArgument($BitDepth)
+            [void]$PowerShell.AddArgument($ChromaSubsampling)
+            [void]$PowerShell.AddArgument($Encoder)
+            [void]$PowerShell.AddArgument($Quality)
+            [void]$PowerShell.AddArgument($PreserveMetadata)
+            [void]$PowerShell.AddArgument($OutputFormat)
+            [void]$PowerShell.AddArgument($LogFile)
+            [void]$PowerShell.AddArgument($HelpersPath)
+
+            $jobInfo = @{
+                PowerShell = $PowerShell
+                Handle = $PowerShell.BeginInvoke()
+                InputFile = $fileInfo.File
+                Index = $fileInfo.Index
+            }
+
+            [void]$ActiveJobs.Add($jobInfo)
+
+            # Add small delay between job starts to prevent system spike
+            if ($JobStartDelay -gt 0 -and $FileQueue.Count -gt 0) {
+                Start-Sleep -Milliseconds $JobStartDelay
+            }
+        }
+
+        # Check for completed jobs
+        $jobsToRemove = [System.Collections.ArrayList]@()
+
+        for ($i = 0; $i -lt $ActiveJobs.Count; $i++) {
+            $job = $ActiveJobs[$i]
+
+            if ($job.Handle.IsCompleted) {
                 $CompletedCount++
 
                 try {
@@ -610,7 +708,13 @@ if ($ParallelJobs -eq 1) {
 
                             if ($result.QualityMetrics) {
                                 $metrics = $result.QualityMetrics
-                                Write-Log -Message "  Quality: SSIM=$($metrics.SSIM.ToString("0.0000")), PSNR=$($metrics.PSNR.ToString("0.00")) dB" -LogFile $LogFile -Color "Cyan"
+
+                                # Get quality rating and color
+                                $qualityRating = Get-QualityRating -SSIM $metrics.SSIM -PSNR $metrics.PSNR
+
+                                # Format quality metrics with rating
+                                $qualityMessage = "  Quality: SSIM=$($metrics.SSIM.ToString("0.0000")) [$($qualityRating.SSIMRating)], PSNR=$($metrics.PSNR.ToString("0.00")) dB [$($qualityRating.PSNRRating)] - Overall: $($qualityRating.OverallRating)"
+                                Write-Log -Message $qualityMessage -LogFile $LogFile -Color $qualityRating.Color
 
                                 # Add to quality reports
                                 $conversionData = @{
@@ -648,10 +752,18 @@ if ($ParallelJobs -eq 1) {
                     Write-Log -Message "" -LogFile $LogFile
                 }
 
-                $Job.PowerShell.Dispose()
+                # Clean up completed job
+                $job.PowerShell.Dispose()
+                [void]$jobsToRemove.Add($i)
             }
         }
 
+        # Remove completed jobs from active list (in reverse order to maintain indices)
+        for ($i = $jobsToRemove.Count - 1; $i -ge 0; $i--) {
+            $ActiveJobs.RemoveAt($jobsToRemove[$i])
+        }
+
+        # Small sleep to prevent tight loop CPU usage
         Start-Sleep -Milliseconds 100
     }
 
@@ -720,6 +832,9 @@ Show-ConversionStats -TotalFiles $TotalFiles `
 
 Write-Log -Message "Completed at: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -LogFile $LogFile -Color "White"
 Write-Log -Message "Log file: $LogFile" -LogFile $LogFile -Color "DarkGray"
+
+# Clean up any remaining child processes
+Stop-AllChildProcesses
 
 # Pause before exit
 Write-Host "`nPress any key to exit..." -ForegroundColor Gray

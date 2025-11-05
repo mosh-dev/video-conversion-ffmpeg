@@ -41,7 +41,11 @@ $uiResult = Show-ConversionUI -OutputCodec $OutputCodec `
                               -OutputExtension $OutputExtension `
                               -AudioCodec $AudioCodec `
                               -DefaultAudioBitrate $DefaultAudioBitrate `
-                              -DefaultPreset $DefaultPreset
+                              -DefaultPreset $DefaultPreset `
+                              -EnableFilmGrain $EnableFilmGrain `
+                              -FilmGrainStrength $FilmGrainStrength `
+                              -EnableSharpness $EnableSharpness `
+                              -SharpnessStrength $SharpnessStrength
 
 # Check if user cancelled
 if ($uiResult.Cancelled) {
@@ -58,6 +62,10 @@ $PreserveAudio = $uiResult.PreserveAudio
 $BitrateMultiplier = $uiResult.BitrateMultiplier
 $SelectedPreset = $uiResult.Preset
 $SelectedAACBitrate = $uiResult.AACBitrate
+$EnableFilmGrain = $uiResult.EnableFilmGrain
+$FilmGrainStrength = $uiResult.FilmGrainStrength
+$EnableSharpness = $uiResult.EnableSharpness
+$SharpnessStrength = $uiResult.SharpnessStrength
 
 # Update output extension if user selected a specific format
 if (-not $PreserveContainer -and $uiResult.OutputExtension) {
@@ -486,7 +494,12 @@ foreach ($File in $VideoFiles) {
         $vmafScore = Test-ConversionQuality -SourcePath $InputPath `
                                            -EncodingParams $testParams `
                                            -TestDuration $PreviewDuration `
-                                           -StartPosition $PreviewStartPosition
+                                           -StartPosition $PreviewStartPosition `
+                                           -OutputDir $OutputDir `
+                                           -EnableFilmGrain $EnableFilmGrain `
+                                           -FilmGrainStrength $FilmGrainStrength `
+                                           -EnableSharpness $EnableSharpness `
+                                           -SharpnessStrength $SharpnessStrength
 
         if ($null -ne $vmafScore) {
             # Display VMAF score with color coding using helper functions
@@ -625,21 +638,62 @@ foreach ($File in $VideoFiles) {
     }
     [System.IO.File]::AppendAllText($LogFile, "  Bit Depth: $TargetBitDepth-bit ($OutputBitDepth)`n", [System.Text.UTF8Encoding]::new($false))
 
+    # Build video filter chain
+    $VideoFilters = @()
+
     # Determine the pixel format based on target bit depth
     if ($UseCUDA) {
         # CUDA hardware scaling with format
         if ($TargetBitDepth -eq 10) {
-            $FFmpegArgs += @("-vf", "scale_cuda=format=p010le")
+            $VideoFilters += "scale_cuda=format=p010le"
         } else {
-            $FFmpegArgs += @("-vf", "scale_cuda=format=yuv420p")
+            $VideoFilters += "scale_cuda=format=yuv420p"
         }
+
+        # NOTE: For NVENC, we skip CPU filters (grain/sharpness) to avoid GPU↔CPU transfers
+        # These filters require hwdownload/hwupload which causes instability with long encodes
+        # Instead, we use NVENC's built-in quality parameters (spatial_aq, etc.)
+
     } else {
-        # Software encoding: use format filter (scale filter doesn't support 'format' option)
+        # Software encoding: use format filter
         if ($TargetBitDepth -eq 10) {
-            $FFmpegArgs += @("-vf", "format=yuv420p10le")
+            $VideoFilters += "format=yuv420p10le"
         } else {
-            $FFmpegArgs += @("-vf", "format=yuv420p")
+            $VideoFilters += "format=yuv420p"
         }
+
+        # Add film grain filter if enabled (software encoders only)
+        if ($EnableFilmGrain) {
+            # noise filter: noise=alls=STRENGTH:allf=t (adds artificial grain/noise)
+            # alls = strength for all components (0-100), allf=t for temporal noise
+            $GrainStrength = [int]$FilmGrainStrength
+            $VideoFilters += "noise=alls=$GrainStrength`:allf=t"
+            Write-Host "  Film Grain: Enabled (strength: $GrainStrength) - SVT only" -ForegroundColor DarkGray
+            [System.IO.File]::AppendAllText($LogFile, "  Film Grain: Enabled (strength: $GrainStrength) - SVT only`n", [System.Text.UTF8Encoding]::new($false))
+        }
+
+        # Add sharpness filter if enabled (software encoders only)
+        if ($EnableSharpness) {
+            # unsharp filter: unsharp=luma_msize_x:luma_msize_y:luma_amount:chroma_msize_x:chroma_msize_y:chroma_amount
+            # Simplified: unsharp=5:5:amount (5x5 matrix, amount controls strength)
+            # amount: -2.0 to 5.0 (negative = blur, positive = sharpen)
+            $SharpAmount = [math]::Round($SharpnessStrength, 1)
+            $VideoFilters += "unsharp=5:5:$SharpAmount"
+            Write-Host "  Sharpness: Enabled (strength: $SharpAmount) - SVT only" -ForegroundColor DarkGray
+            [System.IO.File]::AppendAllText($LogFile, "  Sharpness: Enabled (strength: $SharpAmount) - SVT only`n", [System.Text.UTF8Encoding]::new($false))
+        }
+    }
+
+    # Show warning if filters are enabled but using NVENC
+    if ($UseCUDA -and ($EnableFilmGrain -or $EnableSharpness)) {
+        Write-Host "  Note: Film Grain/Sharpness filters are only available for SVT encoders (skipped for NVENC)" -ForegroundColor Yellow
+        [System.IO.File]::AppendAllText($LogFile, "  Note: Film Grain/Sharpness filters skipped (NVENC uses built-in quality parameters instead)`n", [System.Text.UTF8Encoding]::new($false))
+    }
+
+    # Join all filters with commas and add to ffmpeg arguments
+    if ($VideoFilters.Count -gt 0) {
+        $FilterChain = $VideoFilters -join ","
+        $FFmpegArgs += @("-vf", $FilterChain)
     }
 
     # HDR Metadata Preservation (for 10-bit content)
@@ -745,12 +799,20 @@ foreach ($File in $VideoFiles) {
             "-bufsize", $BufSize,
             "-multipass", "fullres",
             "-tune:v", "hq",
-            "-rc:v", "vbr"
+            "-rc:v", "vbr",
+            "-spatial_aq", "1",        # Enable spatial adaptive quantization for better detail
+            "-temporal_aq", "1"        # Enable temporal adaptive quantization for motion
         )
 
         # Add tier parameter only for HEVC NVENC (not supported by AV1 NVENC)
         if ($OutputCodec -eq "HEVC_NVENC") {
             $CommonVideoParams += @("-tier:v", "0")
+        }
+
+        # Log NVENC quality enhancements
+        if ($UseCUDA) {
+            Write-Host "  NVENC Quality: Spatial AQ + Temporal AQ enabled (replaces CPU filters)" -ForegroundColor DarkGray
+            [System.IO.File]::AppendAllText($LogFile, "  NVENC Quality: Spatial AQ + Temporal AQ enabled`n", [System.Text.UTF8Encoding]::new($false))
         }
     }
 

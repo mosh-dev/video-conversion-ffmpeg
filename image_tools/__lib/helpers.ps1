@@ -234,11 +234,20 @@ function Test-LibheifAvailable {
     # Check if heif-enc is in __lib directory first
     $scriptDir = Split-Path -Parent $PSScriptRoot
 
-    if (Test-Path $LibHeifPath) {
-        # Add __lib to PATH for this session
-        $libDir = Join-Path $scriptDir "__lib\libheif-1.20.2-win64"
-        if ($env:Path -notlike "*$libDir*") {
-            $env:Path += ";$libDir"
+    # Search for any libheif directory in __lib
+    $libBaseDir = Join-Path $scriptDir "__lib"
+    $libheifDirs = Get-ChildItem -Path $libBaseDir -Directory -Filter "libheif*" -ErrorAction SilentlyContinue
+
+    foreach ($libDir in $libheifDirs) {
+        $heifEncPath = Join-Path $libDir.FullName "heif-enc.exe"
+
+        # Add to PATH if heif-enc.exe exists
+        if (Test-Path -LiteralPath $heifEncPath) {
+            $libDirPath = $libDir.FullName
+            if ($env:Path -notlike "*$libDirPath*") {
+                $env:Path = "$libDirPath;$env:Path"
+            }
+            break
         }
     }
 
@@ -280,17 +289,17 @@ function ConvertTo-HEIC {
         # Build heif-enc arguments
         # heif-enc uses quality 0-100 (higher = better)
         $heifArgs = @(
-            "-q", $Quality
+            "-p", "quality=$Quality"
         )
 
-        # Add chroma subsampling
-        if ($ChromaSubsampling -eq "444") {
-            $heifArgs += "-C", "444"
-        } elseif ($ChromaSubsampling -eq "422") {
-            $heifArgs += "-C", "422"
-        } else {
-            $heifArgs += "-C", "420"
+        # Add chroma subsampling using -p parameter format
+        # heif-enc supports: 420, 422, 444
+        $chromaValue = switch ($ChromaSubsampling) {
+            "444" { "444" }
+            "422" { "422" }
+            default { "420" }
         }
+        $heifArgs += "-p", "chroma=$chromaValue"
 
         # Add bit depth
         if ($BitDepth -eq 10) {
@@ -299,13 +308,13 @@ function ConvertTo-HEIC {
             $heifArgs += "-b", "8"
         }
 
-        # Add EXIF metadata handling
-        if ($PreserveMetadata) {
-            $heifArgs += "-E"
-        }
+        # Note: heif-enc preserves EXIF metadata by default
+        # There's no explicit flag to disable/enable it
 
-        # Add input and output
+        # Add output path
         $heifArgs += "-o", $OutputPath
+
+        # Add input file
         $heifArgs += $InputPath
 
         # Run heif-enc
@@ -365,6 +374,47 @@ function Measure-ImageQuality {
             PSNR = $null
             Success = $false
         }
+    }
+}
+
+function Get-QualityRating {
+    param(
+        [double]$SSIM,
+        [double]$PSNR
+    )
+
+    # Determine SSIM rating
+    $ssimRating = if ($SSIM -ge 0.98) { "Excellent" }
+                  elseif ($SSIM -ge 0.95) { "Very Good" }
+                  elseif ($SSIM -ge 0.90) { "Acceptable" }
+                  else { "Poor" }
+
+    # Determine PSNR rating
+    $psnrRating = if ($PSNR -ge 45) { "Excellent" }
+                  elseif ($PSNR -ge 40) { "Very Good" }
+                  elseif ($PSNR -ge 35) { "Acceptable" }
+                  else { "Poor" }
+
+    # Overall rating (use worst of the two)
+    $overallRating = if ($ssimRating -eq "Poor" -or $psnrRating -eq "Poor") { "Poor" }
+                     elseif ($ssimRating -eq "Acceptable" -or $psnrRating -eq "Acceptable") { "Acceptable" }
+                     elseif ($ssimRating -eq "Very Good" -or $psnrRating -eq "Very Good") { "Very Good" }
+                     else { "Excellent" }
+
+    # Determine color based on overall rating
+    $color = switch ($overallRating) {
+        "Excellent"  { "Green" }
+        "Very Good"  { "Cyan" }
+        "Acceptable" { "Yellow" }
+        "Poor"       { "Red" }
+        default      { "White" }
+    }
+
+    return @{
+        OverallRating = $overallRating
+        SSIMRating = $ssimRating
+        PSNRRating = $psnrRating
+        Color = $color
     }
 }
 

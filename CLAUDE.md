@@ -22,19 +22,24 @@ Video conversion workspace for batch converting videos to AV1/HEVC using ffmpeg 
 
 4. **Hardware Acceleration**: CUDA (primary) → D3D11VA (FLV/3GP/DIVX fallback) → Software (auto fallback).
 
-5. **Dynamic Parameters**: Two-stage matching - resolution tier, then FPS range. Applies `$BitrateModifier`.
+5. **Video Filters - Encoder Specific**:
+   - **NVENC (GPU-only)**: Filters disabled. Uses built-in `-spatial_aq 1` and `-temporal_aq 1` for quality enhancement. No CPU filters to avoid GPU↔CPU transfers which cause encoding failures on long videos.
+   - **SVT (CPU)**: Film Grain (`noise` filter) and Sharpness (`unsharp` filter) available. Applied directly on CPU during encoding.
+   - **Reason**: hwdownload/hwupload cycle for CPU filters causes NVENC instability and crashes during extended encodes (verified with 4K 33-minute test failing at 19:33).
 
-6. **Audio Compatibility**: Detects ALL audio streams via ffprobe (not just first). Auto re-encodes incompatible codecs (WMA, Vorbis, DTS, PCM variants, unknown/undecodable codecs). When incompatible audio detected, maps only first decodable stream (`-map 0:a:0`) to prevent ffmpeg decode errors. Falls back to AAC for MP4/MOV.
+6. **Dynamic Parameters**: Two-stage matching - resolution tier, then FPS range. Applies `$BitrateModifier`.
 
-7. **Container Validation**: Blocks incompatible combinations (e.g., AVI+AV1, WebM+HEVC, MOV+AV1). See `codec_mappings.ps1`.
+7. **Audio Compatibility**: Detects ALL audio streams via ffprobe (not just first). Auto re-encodes incompatible codecs (WMA, Vorbis, DTS, PCM variants, unknown/undecodable codecs). When incompatible audio detected, maps only first decodable stream (`-map 0:a:0`) to prevent ffmpeg decode errors. Falls back to AAC for MP4/MOV.
 
-8. **Collision Detection**: Renames files when multiple sources produce same output (e.g., video.ts → video_ts.mp4).
+8. **Container Validation**: Blocks incompatible combinations (e.g., AVI+AV1, WebM+HEVC, MOV+AV1). See `codec_mappings.ps1`.
 
-9. **Path Handling**: Uses `-LiteralPath` for `[]` brackets, `Join-Path` for construction, UTF-8 without BOM.
+9. **Collision Detection**: Renames files when multiple sources produce same output (e.g., video.ts → video_ts.mp4).
 
-10. **MKV Handling**: `-map 0`, `-fflags +genpts`, `-ignore_unknown` to preserve all streams.
+10. **Path Handling**: Uses `-LiteralPath` for `[]` brackets, `Join-Path` for construction, UTF-8 without BOM.
 
-11. **UI Combobox Order** (show_conversion_ui.ps1): Codec dropdown order: AV1_NVENC (index 0), AV1_SVT (index 1), HEVC_NVENC (index 2), HEVC_SVT (index 3). Bit depth order: source (index 0), 8bit (index 1), 10bit (index 2). Index mapping logic at lines 765-780 (loading defaults) and 889-904 (reading selection).
+11. **MKV Handling**: `-map 0`, `-fflags +genpts`, `-ignore_unknown` to preserve all streams.
+
+12. **UI Combobox Order** (show_conversion_ui.ps1): Codec dropdown order: AV1_NVENC (index 0), AV1_SVT (index 1), HEVC_NVENC (index 2), HEVC_SVT (index 3). Bit depth order: source (index 0), 8bit (index 1), 10bit (index 2). Index mapping logic at lines 765-780 (loading defaults) and 889-904 (reading selection).
 
 ## Critical Implementation Notes
 

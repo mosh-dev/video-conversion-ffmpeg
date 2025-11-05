@@ -13,8 +13,6 @@ $InputDir = ".\_input_files"
 $OutputDir = ".\_output_files"
 $LogDir = ".\__logs"
 
-$LibHeifPath = "__lib\libheif-1.20.2-win64\heif-enc.exe"
-
 # Log file will be auto-generated with timestamp (e.g., conversion_2025-01-15_14-30-45.txt)
 # This is set in convert_images.ps1 and cannot be configured here
 
@@ -32,7 +30,9 @@ $FileExtensions = @(
     "*.bmp",    # Bitmap image
     "*.tif",    # TIFF image
     "*.tiff",   # TIFF image (alternate extension)
-    "*.webp"    # WebP image
+    "*.webp",   # WebP image
+    "*.heic",   # HEIC image (Apple)
+    "*.heif"    # HEIF image (generic)
 )
 
 # ============================================================================
@@ -99,8 +99,22 @@ $PreserveMetadata = $true         # Set to $true to preserve metadata, $false to
 $Encoder = "libx265"
 
 # Parallel Processing
-# Number of concurrent conversion jobs (1-16)
-# Recommended: Number of CPU cores or half of CPU cores
-# Higher values = faster batch processing but more CPU/memory usage
-# Default: 4 (good balance for most systems)
-$ParallelJobs = 4
+# Number of concurrent conversion jobs (1-8)
+# IMPORTANT: Image encoding (especially AVIF) is VERY CPU-intensive
+# Recommended: 2-3 jobs for most systems to maintain responsiveness
+# Set to 0 for automatic detection (uses 1/4 of CPU cores, max 3)
+# Set to 1 for sequential processing if system remains choppy
+# Default: 0 (auto-detect, conservative settings)
+$ParallelJobs = 0
+
+# Process Priority
+# Options: "Low", "BelowNormal", "Normal", "AboveNormal", "High"
+# Recommended: "Low" to prevent system choppiness during conversions
+# Lower priority = smoother system responsiveness, slightly slower encoding
+$ProcessPriority = "Low"
+
+# Job Start Delay (milliseconds)
+# Delay between starting parallel jobs to prevent system overload
+# Recommended: 300-1000ms for smoother system operation
+# Higher values = smoother but slower batch start
+$JobStartDelay = 500

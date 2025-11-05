@@ -71,6 +71,17 @@ $OutputCodec = "AV1_NVENC"  # Change to "AV1_NVENC", "HEVC_NVENC", "AV1_SVT", or
 # VIDEO ENCODING SETTINGS
 # ============================================================================
 
+# Video Filters (SVT Encoders Only - NVENC uses built-in GPU quality parameters)
+# Film Grain: Add artificial grain/noise to make output look more detailed (0-100, higher = more grain)
+# NOTE: Only works with AV1_SVT and HEVC_SVT encoders. NVENC encoders use Spatial/Temporal AQ instead.
+$EnableFilmGrain = $false          # Set to $true to enable film grain addition
+$FilmGrainStrength = 5             # Strength: 0 (none) to 100 (maximum), recommended: 5-20
+
+# Sharpness: Enhance or reduce sharpness using unsharp filter (-2.0 to 2.0)
+# NOTE: Only works with AV1_SVT and HEVC_SVT encoders. NVENC encoders use Spatial/Temporal AQ instead.
+$EnableSharpness = $false          # Set to $true to enable sharpness adjustment
+$SharpnessStrength = 0.1           # Strength: -2.0 (blur) to 2.0 (sharp), 0.0 = neutral, recommended: 0.1-0.5
+
 # Bit Depth Selection
 # Options: "8bit", "10bit", "source"
 # - 8bit: Standard 8-bit color depth (smaller files, wider compatibility)

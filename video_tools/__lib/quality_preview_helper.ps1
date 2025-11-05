@@ -9,7 +9,12 @@ function Test-ConversionQuality {
         [string]$SourcePath,
         [hashtable]$EncodingParams,
         [int]$TestDuration,
-        [string]$StartPosition
+        [string]$StartPosition,
+        [string]$OutputDir,
+        [bool]$EnableFilmGrain = $false,
+        [int]$FilmGrainStrength = 15,
+        [bool]$EnableSharpness = $false,
+        [double]$SharpnessStrength = 0.5
     )
 
     try {
@@ -33,14 +38,27 @@ function Test-ConversionQuality {
             $startTime = [Math]::Max(0, $metadata.Duration - $TestDuration - 5)
         }
 
-        # Create temp directory for test files
+        # Create preview directory for preview clips
+        $previewDir = Join-Path $OutputDir "preview"
+        if (-not (Test-Path -LiteralPath $previewDir)) {
+            New-Item -ItemType Directory -Path $previewDir -Force | Out-Null
+        }
+
+        # Create temp directory for temporary source extraction
         $tempDir = Join-Path $env:TEMP "quality_preview_$(Get-Date -Format 'yyyyMMddHHmmss')"
         New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
 
-        # Keep source clip in original format, use conversion settings for encoded clip
+        # Generate descriptive filename for preview clip
+        $sourceBaseName = [System.IO.Path]::GetFileNameWithoutExtension($SourcePath)
+        $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+        $codec = $EncodingParams.Codec
+        $preset = $EncodingParams.Preset
+        $previewFileName = "${sourceBaseName}_preview_${codec}_${preset}_${timestamp}.mp4"
+
+        # Keep source clip in temp, save encoded clip to preview directory
         $sourceExtension = [System.IO.Path]::GetExtension($SourcePath)
         $tempSource = Join-Path $tempDir "source$sourceExtension"
-        $tempEncoded = Join-Path $tempDir "encoded.mp4"
+        $tempEncoded = Join-Path $previewDir $previewFileName
 
         Write-Host "  Extracting $TestDuration-second test clip (from $startTime`s)..." -ForegroundColor Yellow -NoNewline
 
@@ -99,6 +117,36 @@ function Test-ConversionQuality {
             $PresetMap[$presetSliderPosition].NVENC
         }
 
+        # Build video filter chain (same as main conversion script)
+        $VideoFilters = @()
+        $UseCUDA = ($EncodingParams.HWAccel -eq "cuda")
+
+        # Determine pixel format (simplified for preview - assume 8-bit for test clips)
+        if ($UseCUDA) {
+            # NVENC: Use GPU scaling only, no CPU filters
+            $VideoFilters += "scale_cuda=format=yuv420p"
+            # NOTE: Film Grain/Sharpness filters are NOT applied for NVENC
+            # NVENC uses built-in spatial_aq and temporal_aq instead
+        } else {
+            # Software encoding: use format filter
+            $VideoFilters += "format=yuv420p"
+
+            # Add film grain filter if enabled (SVT encoders only)
+            if ($EnableFilmGrain) {
+                $GrainStrength = [int]$FilmGrainStrength
+                $VideoFilters += "noise=alls=$GrainStrength`:allf=t"
+            }
+
+            # Add sharpness filter if enabled (SVT encoders only)
+            if ($EnableSharpness) {
+                $SharpAmount = [math]::Round($SharpnessStrength, 1)
+                $VideoFilters += "unsharp=5:5:$SharpAmount"
+            }
+        }
+
+        # Join all filters into a filter chain
+        $FilterChain = if ($VideoFilters.Count -gt 0) { $VideoFilters -join "," } else { "" }
+
         # Build encoding arguments
         if ($isSoftwareEncoder) {
             # 2-PASS ENCODING FOR SVT (matches main conversion script)
@@ -122,6 +170,11 @@ function Test-ConversionQuality {
                     "-i", $tempSource,
                     "-map", "0:V:0"  # Map main video only, exclude attached pictures
                 )
+
+                # Add video filter chain if filters are enabled
+                if ($FilterChain) {
+                    $Pass1Args += @("-vf", $FilterChain)
+                }
 
                 # Add common video parameters
                 $Pass1Args += @(
@@ -174,6 +227,11 @@ function Test-ConversionQuality {
                     "-i", $tempSource,
                     "-map", "0:V:0"  # Map main video only, exclude attached pictures
                 )
+
+                # Add video filter chain if filters are enabled
+                if ($FilterChain) {
+                    $Pass2Args += @("-vf", $FilterChain)
+                }
 
                 # Add common video parameters
                 $Pass2Args += @(
@@ -242,6 +300,10 @@ function Test-ConversionQuality {
                         }
                     }
 
+                    # Cleanup preview file on failure
+                    if (Test-Path -LiteralPath $tempEncoded) {
+                        Remove-Item -LiteralPath $tempEncoded -Force -ErrorAction SilentlyContinue
+                    }
                     return $null
                 }
                 Write-Host "Complete" -ForegroundColor Green
@@ -250,14 +312,32 @@ function Test-ConversionQuality {
                 # Restore working directory on error
                 Set-Location -Path $OriginalWorkingDir
                 Write-Host " Failed: $($_.Exception.Message)" -ForegroundColor Red
+                # Cleanup preview file on error
+                if (Test-Path -LiteralPath $tempEncoded) {
+                    Remove-Item -LiteralPath $tempEncoded -Force -ErrorAction SilentlyContinue
+                }
                 return $null
             }
 
         } else {
             # SINGLE-PASS ENCODING FOR NVENC
             $testEncodeArgs = @(
-                "-hwaccel", $EncodingParams.HWAccel,
-                "-i", $tempSource,
+                "-hwaccel", $EncodingParams.HWAccel
+            )
+
+            # Add hwaccel output format for CUDA
+            if ($EncodingParams.HWAccel -eq "cuda") {
+                $testEncodeArgs += @("-hwaccel_output_format", "cuda")
+            }
+
+            $testEncodeArgs += @("-i", $tempSource)
+
+            # Add video filter chain if filters are enabled
+            if ($FilterChain) {
+                $testEncodeArgs += @("-vf", $FilterChain)
+            }
+
+            $testEncodeArgs += @(
                 "-c:v", $ffmpegCodec,
                 "-preset", $encoderPreset,
                 "-b:v", $EncodingParams.VideoBitrate,
@@ -291,6 +371,10 @@ function Test-ConversionQuality {
                     }
                 }
 
+                # Cleanup preview file on failure
+                if (Test-Path -LiteralPath $tempEncoded) {
+                    Remove-Item -LiteralPath $tempEncoded -Force -ErrorAction SilentlyContinue
+                }
                 return $null
             }
             Write-Host " Done" -ForegroundColor Green
@@ -327,19 +411,29 @@ function Test-ConversionQuality {
             $vmafScore = [math]::Round([double]$Matches[1], 2)
         }
 
-        # Cleanup temp files
+        # Cleanup temp files (only temp source, keep the encoded preview)
         Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
 
         if ($null -ne $vmafScore) {
             Write-Host " Done" -ForegroundColor Green
+            Write-Host "  Preview clip saved: preview\$previewFileName" -ForegroundColor DarkGray
             return $vmafScore
         } else {
             Write-Host " Failed to parse score" -ForegroundColor Red
+            # Clean up the preview file if analysis failed
+            Remove-Item -LiteralPath $tempEncoded -Force -ErrorAction SilentlyContinue
             return $null
         }
 
     } catch {
         Write-Host "  Error during quality preview: $($_.Exception.Message)" -ForegroundColor Red
+        # Cleanup on error
+        if (Test-Path -Path $tempDir) {
+            Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        if (Test-Path -LiteralPath $tempEncoded) {
+            Remove-Item -LiteralPath $tempEncoded -Force -ErrorAction SilentlyContinue
+        }
         return $null
     }
 }

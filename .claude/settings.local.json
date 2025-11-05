@@ -1,23 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(ffmpeg:*)",
-      "Bash(powershell -ExecutionPolicy Bypass -File \".\\convert_videos.ps1\")",
-      "Bash(powershell -Command \"Get-Content -Path ''.\\convert_videos.ps1'' -Encoding UTF8 | Select-Object -Index 287\")",
-      "Bash(powershell -Command \"Get-Content -Path ''.\\convert_videos.ps1'' -Encoding UTF8 | Select-Object -Index 237\")",
-      "Bash(powershell -ExecutionPolicy Bypass -File \".\\test_encoding.ps1\")",
-      "Bash(powershell -Command:*)",
-      "Bash(powershell:*)",
-      "Bash(ffprobe:*)",
-      "Bash(dotnet --version:*)",
-      "Bash(dotnet restore:*)",
-      "Bash(dotnet build:*)",
-      "Bash(mkdir:*)",
-      "Read(//d/**)",
-      "Bash(Get-ChildItem -Path D:VideoConversion -Recurse -File -Depth 2)",
-      "Bash(Select-Object FullName, Length)",
-      "Bash(Format-Table -AutoSize)",
-      "Bash(Get-ChildItem -Path D:ffmpeg-ps-tools -Recurse -File -Depth 2)"
+      "Bash(Sort-Object LastWriteTime -Descending)",
+      "Bash(Select-Object -First 1 -ExpandProperty Name)"
     ],
     "deny": [],
     "ask": []

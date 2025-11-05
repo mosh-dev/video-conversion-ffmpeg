@@ -14,7 +14,11 @@ function Show-ConversionUI {
         [string]$OutputExtension,
         [string]$AudioCodec,
         [string]$DefaultAudioBitrate,
-        [string]$DefaultPreset
+        [string]$DefaultPreset,
+        [bool]$EnableFilmGrain,
+        [int]$FilmGrainStrength,
+        [bool]$EnableSharpness,
+        [double]$SharpnessStrength
     )
 
     Add-Type -AssemblyName PresentationFramework
@@ -81,8 +85,8 @@ function Show-ConversionUI {
 <Window
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Width="600"
-    Height="900"
+    Width="1000"
+    Height="840"
     WindowStartupLocation="CenterScreen"
     ResizeMode="NoResize"
     WindowStyle="None"
@@ -379,6 +383,55 @@ function Show-ConversionUI {
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- Modern CheckBox Style -->
+        <Style x:Key="ModernCheckBox" TargetType="CheckBox">
+            <Setter Property="Foreground" Value="$textColor"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border
+                                x:Name="CheckBoxBorder"
+                                Grid.Column="0"
+                                Width="20"
+                                Height="20"
+                                Background="$cardBackground"
+                                BorderBrush="$borderColor"
+                                BorderThickness="2"
+                                CornerRadius="4"
+                                VerticalAlignment="Center">
+                                <Path
+                                    x:Name="CheckMark"
+                                    Data="M 2 6 L 6 10 L 14 2"
+                                    Stroke="White"
+                                    StrokeThickness="2"
+                                    Visibility="Collapsed"/>
+                            </Border>
+                            <ContentPresenter
+                                Grid.Column="1"
+                                Margin="8,0,0,0"
+                                VerticalAlignment="Center"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="CheckBoxBorder" Property="Background" Value="$accentColor"/>
+                                <Setter TargetName="CheckBoxBorder" Property="BorderBrush" Value="$accentColor"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="CheckBoxBorder" Property="BorderBrush" Value="$accentColor"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Border Background="$backgroundColor" CornerRadius="8">
@@ -420,8 +473,16 @@ function Show-ConversionUI {
                 CornerRadius="8"
                 Padding="24">
 
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="24"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- LEFT COLUMN -->
+                    <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel>
 
                         <!-- Video Codec -->
                         <TextBlock
@@ -589,6 +650,13 @@ function Show-ConversionUI {
                             Foreground="$secondaryTextColor"
                             Margin="0,0,0,20"/>
 
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- RIGHT COLUMN -->
+                    <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel>
+
                         <!-- Audio Encoding -->
                         <TextBlock
                             Text="Audio Encoding"
@@ -663,6 +731,150 @@ function Show-ConversionUI {
                                 Margin="0,0,0,20"/>
                         </StackPanel>
 
+                        <!-- Video Filters Section (SVT Encoders Only) -->
+                        <StackPanel x:Name="VideoFiltersSection" Visibility="Collapsed" Margin="0,4,0,0">
+                            <TextBlock
+                                Text="Video Filters (SVT Encoders Only)"
+                                FontFamily="Segoe UI Variable, Segoe UI"
+                                FontSize="14"
+                                FontWeight="SemiBold"
+                                Foreground="$textColor"
+                                Margin="0,0,0,12"/>
+
+                            <TextBlock
+                                Text="Note: CPU filters not available for NVENC (uses GPU quality enhancements)"
+                                FontSize="11"
+                                FontStyle="Italic"
+                                Foreground="$secondaryTextColor"
+                                Margin="0,0,0,12"/>
+
+                            <!-- Film Grain -->
+                            <CheckBox
+                                x:Name="FilmGrainCheckBox"
+                                Content="Film Grain"
+                                Style="{StaticResource ModernCheckBox}"
+                                FontFamily="Segoe UI Variable, Segoe UI"
+                                FontSize="13"
+                                Margin="0,0,0,12"/>
+
+                        <!-- Film Grain Slider (conditional) -->
+                        <StackPanel x:Name="FilmGrainPanel" Visibility="Collapsed" Margin="0,0,0,0">
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock
+                                    Grid.Column="0"
+                                    Text="Film Grain Strength"
+                                    FontFamily="Segoe UI Variable, Segoe UI"
+                                    FontSize="13"
+                                    Foreground="$secondaryTextColor"
+                                    VerticalAlignment="Center"/>
+                                <TextBlock
+                                    x:Name="FilmGrainValue"
+                                    Grid.Column="1"
+                                    Text="5"
+                                    FontFamily="Segoe UI Variable, Segoe UI"
+                                    FontSize="14"
+                                    FontWeight="Bold"
+                                    Foreground="$accentColor"
+                                    VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <Slider
+                                x:Name="FilmGrainSlider"
+                                Style="{StaticResource ModernSlider}"
+                                Minimum="0"
+                                Maximum="100"
+                                Value="5"
+                                TickFrequency="1"
+                                IsSnapToTickEnabled="True"
+                                Margin="0,0,0,8"/>
+
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="0" FontSize="11" Foreground="$secondaryTextColor" HorizontalAlignment="Left"/>
+                                <TextBlock Grid.Column="1" Text="50" FontSize="11" Foreground="$secondaryTextColor" HorizontalAlignment="Center"/>
+                                <TextBlock Grid.Column="2" Text="100" FontSize="11" Foreground="$secondaryTextColor" HorizontalAlignment="Right"/>
+                            </Grid>
+
+                            <TextBlock
+                                Text="Higher values = more grain/detail appearance (recommended: 5-20)"
+                                FontSize="11"
+                                FontStyle="Italic"
+                                Foreground="$secondaryTextColor"
+                                Margin="0,0,0,20"/>
+                        </StackPanel>
+
+                        <!-- Sharpness -->
+                        <CheckBox
+                            x:Name="SharpnessCheckBox"
+                            Content="Sharpness Adjustment"
+                            Style="{StaticResource ModernCheckBox}"
+                            FontFamily="Segoe UI Variable, Segoe UI"
+                            FontSize="13"
+                            Margin="0,0,0,12"/>
+
+                        <!-- Sharpness Slider (conditional) -->
+                        <StackPanel x:Name="SharpnessPanel" Visibility="Collapsed" Margin="0,0,0,0">
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock
+                                    Grid.Column="0"
+                                    Text="Sharpness Strength"
+                                    FontFamily="Segoe UI Variable, Segoe UI"
+                                    FontSize="13"
+                                    Foreground="$secondaryTextColor"
+                                    VerticalAlignment="Center"/>
+                                <TextBlock
+                                    x:Name="SharpnessValue"
+                                    Grid.Column="1"
+                                    Text="0.1"
+                                    FontFamily="Segoe UI Variable, Segoe UI"
+                                    FontSize="14"
+                                    FontWeight="Bold"
+                                    Foreground="$accentColor"
+                                    VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <Slider
+                                x:Name="SharpnessSlider"
+                                Style="{StaticResource ModernSlider}"
+                                Minimum="-20"
+                                Maximum="20"
+                                Value="1"
+                                TickFrequency="1"
+                                IsSnapToTickEnabled="True"
+                                Margin="0,0,0,8"/>
+
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="-2.0 (Blur)" FontSize="11" Foreground="$secondaryTextColor" HorizontalAlignment="Left"/>
+                                <TextBlock Grid.Column="1" Text="0.0 (Neutral)" FontSize="11" Foreground="$secondaryTextColor" HorizontalAlignment="Center"/>
+                                <TextBlock Grid.Column="2" Text="2.0 (Sharp)" FontSize="11" Foreground="$secondaryTextColor" HorizontalAlignment="Right"/>
+                            </Grid>
+
+                            <TextBlock
+                                Text="Positive = sharper, negative = blur (recommended: 0.1-0.5)"
+                                FontSize="11"
+                                FontStyle="Italic"
+                                Foreground="$secondaryTextColor"
+                                Margin="0,0,0,20"/>
+                        </StackPanel>
+                        </StackPanel>
+
                         <!-- Info Box -->
                         <Border
                             Background="$infoBoxBg"
@@ -684,8 +896,9 @@ function Show-ConversionUI {
                             </StackPanel>
                         </Border>
 
-                    </StackPanel>
-                </ScrollViewer>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
             </Border>
 
             <!-- Action Buttons -->
@@ -753,6 +966,15 @@ public class WindowHelper {
     $aacBitratePanel = $window.FindName("AACBitratePanel")
     $aacBitrateSlider = $window.FindName("AACBitrateSlider")
     $aacBitrateValue = $window.FindName("AACBitrateValue")
+    $videoFiltersSection = $window.FindName("VideoFiltersSection")
+    $filmGrainCheckBox = $window.FindName("FilmGrainCheckBox")
+    $filmGrainPanel = $window.FindName("FilmGrainPanel")
+    $filmGrainSlider = $window.FindName("FilmGrainSlider")
+    $filmGrainValue = $window.FindName("FilmGrainValue")
+    $sharpnessCheckBox = $window.FindName("SharpnessCheckBox")
+    $sharpnessPanel = $window.FindName("SharpnessPanel")
+    $sharpnessSlider = $window.FindName("SharpnessSlider")
+    $sharpnessValue = $window.FindName("SharpnessValue")
     $startButton = $window.FindName("StartButton")
     $cancelButton = $window.FindName("CancelButton")
 
@@ -810,6 +1032,16 @@ public class WindowHelper {
     $aacBitrateSlider.Value = $audioBitrateNumber
     $aacBitrateValue.Text = "$audioBitrateNumber kbps"
 
+    # Set film grain initial values
+    $filmGrainCheckBox.IsChecked = $EnableFilmGrain
+    $filmGrainSlider.Value = [int]$FilmGrainStrength  # Direct integer value (0-100)
+    $filmGrainValue.Text = $FilmGrainStrength.ToString()
+
+    # Set sharpness initial values
+    $sharpnessCheckBox.IsChecked = $EnableSharpness
+    $sharpnessSlider.Value = [int]($SharpnessStrength * 10)  # Convert to slider range (-20 to 20)
+    $sharpnessValue.Text = $SharpnessStrength.ToString('0.0')
+
     # Function to update audio combo and AAC bitrate visibility
     $UpdateAudioComboState = {
         if ($containerCombo.SelectedIndex -eq 1) {
@@ -817,23 +1049,46 @@ public class WindowHelper {
             $audioCombo.SelectedIndex = 0
             $audioCombo.IsEnabled = $false
             $aacBitratePanel.Visibility = [System.Windows.Visibility]::Collapsed
-            $window.Height = 900  # Smaller height when AAC slider is hidden
         } else {
             # Convert container selected - enable audio combo
             $audioCombo.IsEnabled = $true
             # Show AAC bitrate slider only if re-encode is selected
             if ($audioCombo.SelectedIndex -eq 1) {
                 $aacBitratePanel.Visibility = [System.Windows.Visibility]::Visible
-                $window.Height = 1010  # Expanded height when AAC slider is shown
             } else {
                 $aacBitratePanel.Visibility = [System.Windows.Visibility]::Collapsed
-                $window.Height = 900  # Smaller height when AAC slider is hidden
             }
+        }
+    }
+
+    # Function to update video filters visibility based on codec selection
+    $UpdateVideoFiltersVisibility = {
+        # Check if selected codec is SVT (index 1 = AV1_SVT, index 3 = HEVC_SVT)
+        $isSVT = ($codecCombo.SelectedIndex -eq 1 -or $codecCombo.SelectedIndex -eq 3)
+
+        if ($isSVT) {
+            $videoFiltersSection.Visibility = [System.Windows.Visibility]::Visible
+        } else {
+            $videoFiltersSection.Visibility = [System.Windows.Visibility]::Collapsed
         }
     }
 
     # Apply initial state
     & $UpdateAudioComboState
+    & $UpdateVideoFiltersVisibility
+
+    # Set initial visibility for filter panels (if filters section is visible)
+    if ($EnableFilmGrain) {
+        $filmGrainPanel.Visibility = [System.Windows.Visibility]::Visible
+    }
+    if ($EnableSharpness) {
+        $sharpnessPanel.Visibility = [System.Windows.Visibility]::Visible
+    }
+
+    # Codec combo event - update video filters visibility when codec selection changes
+    $codecCombo.Add_SelectionChanged({
+        & $UpdateVideoFiltersVisibility
+    })
 
     # Container combo event - update audio combo state when container selection changes
     $containerCombo.Add_SelectionChanged({
@@ -862,6 +1117,34 @@ public class WindowHelper {
     $aacBitrateSlider.Add_ValueChanged({
         $value = [int]$aacBitrateSlider.Value
         $aacBitrateValue.Text = "$value kbps"
+    })
+
+    # Film grain checkbox event
+    $filmGrainCheckBox.Add_Checked({
+        $filmGrainPanel.Visibility = [System.Windows.Visibility]::Visible
+    })
+    $filmGrainCheckBox.Add_Unchecked({
+        $filmGrainPanel.Visibility = [System.Windows.Visibility]::Collapsed
+    })
+
+    # Film grain slider event
+    $filmGrainSlider.Add_ValueChanged({
+        $value = [int]$filmGrainSlider.Value
+        $filmGrainValue.Text = "$value"
+    })
+
+    # Sharpness checkbox event
+    $sharpnessCheckBox.Add_Checked({
+        $sharpnessPanel.Visibility = [System.Windows.Visibility]::Visible
+    })
+    $sharpnessCheckBox.Add_Unchecked({
+        $sharpnessPanel.Visibility = [System.Windows.Visibility]::Collapsed
+    })
+
+    # Sharpness slider event
+    $sharpnessSlider.Add_ValueChanged({
+        $value = $sharpnessSlider.Value / 10.0
+        $sharpnessValue.Text = "$($value.ToString('0.0'))"
     })
 
     # Button events
@@ -922,6 +1205,10 @@ public class WindowHelper {
             BitrateMultiplier = $bitrateSlider.Value / 10.0
             PreserveAudio = ($audioCombo.SelectedIndex -eq 0)
             AACBitrate = [int]$aacBitrateSlider.Value
+            EnableFilmGrain = $filmGrainCheckBox.IsChecked
+            FilmGrainStrength = [int]$filmGrainSlider.Value
+            EnableSharpness = $sharpnessCheckBox.IsChecked
+            SharpnessStrength = $sharpnessSlider.Value / 10.0
             Cancelled = $false
         }
     } else {

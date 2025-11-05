@@ -572,7 +572,7 @@ function Show-ImageConversionUI {
                             <TextBlock
                                 x:Name="ParallelJobsValue"
                                 Grid.Column="1"
-                                Text="4"
+                                Text="Auto"
                                 FontFamily="Segoe UI Variable, Segoe UI"
                                 FontSize="16"
                                 FontWeight="Bold"
@@ -582,17 +582,28 @@ function Show-ImageConversionUI {
                         <Slider
                             x:Name="ParallelJobsSlider"
                             Style="{StaticResource ModernSlider}"
-                            Minimum="1"
-                            Maximum="16"
-                            Value="4"
+                            Minimum="0"
+                            Maximum="8"
+                            Value="0"
                             IsSnapToTickEnabled="True"
                             TickFrequency="1"
                             Margin="0,0,0,10"/>
-                        <Grid Margin="0,0,0,24">
-                            <TextBlock Text="Single (1)" FontFamily="Segoe UI Variable, Segoe UI" Foreground="$secondaryTextColor" FontSize="11" HorizontalAlignment="Left"/>
-                            <TextBlock Text="Balanced (4-8)" FontFamily="Segoe UI Variable, Segoe UI" Foreground="$secondaryTextColor" FontSize="11" HorizontalAlignment="Center"/>
-                            <TextBlock Text="Maximum (16)" FontFamily="Segoe UI Variable, Segoe UI" Foreground="$secondaryTextColor" FontSize="11" HorizontalAlignment="Right"/>
+                        <Grid Margin="0,0,0,8">
+                            <TextBlock Text="Auto (Recommended)" FontFamily="Segoe UI Variable, Segoe UI" Foreground="$secondaryTextColor" FontSize="11" HorizontalAlignment="Left"/>
+                            <TextBlock Text="Balanced (2-4)" FontFamily="Segoe UI Variable, Segoe UI" Foreground="$secondaryTextColor" FontSize="11" HorizontalAlignment="Center"/>
+                            <TextBlock Text="Maximum (8)" FontFamily="Segoe UI Variable, Segoe UI" Foreground="$secondaryTextColor" FontSize="11" HorizontalAlignment="Right"/>
                         </Grid>
+
+                        <!-- Parallel Jobs Info -->
+                        <TextBlock
+                            TextWrapping="Wrap"
+                            FontFamily="Segoe UI Variable, Segoe UI"
+                            Foreground="$secondaryTextColor"
+                            FontSize="11"
+                            FontStyle="Italic"
+                            Margin="0,0,0,24">
+                            <Run Text="Note: Image encoding is CPU-intensive. Use 'Auto' for best balance. Set to 1 if system becomes unresponsive."/>
+                        </TextBlock>
 
                         <!-- Options -->
                         <TextBlock
@@ -743,7 +754,7 @@ public class WindowHelper {
     # Update parallel jobs label
     $updateParallelJobsLabel = {
         $jobs = [int]$parallelJobsSlider.Value
-        $parallelJobsValue.Text = "$jobs"
+        $parallelJobsValue.Text = if ($jobs -eq 0) { "Auto" } else { "$jobs" }
     }
     $parallelJobsSlider.Add_ValueChanged($updateParallelJobsLabel)
     & $updateParallelJobsLabel
