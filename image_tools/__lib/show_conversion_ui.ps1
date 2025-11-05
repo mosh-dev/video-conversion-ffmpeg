@@ -80,7 +80,7 @@ function Show-ImageConversionUI {
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Width="600"
-    Height="800"
+    Height="900"
     WindowStartupLocation="CenterScreen"
     ResizeMode="NoResize"
     WindowStyle="None"

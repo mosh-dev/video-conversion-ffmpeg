@@ -180,12 +180,9 @@ $ParallelJobs = $settings.ParallelJobs
 
 # Auto-detect CPU cores if ParallelJobs is 0
 if ($ParallelJobs -eq 0) {
-    $cpuCores = (Get-CimInstance -ClassName Win32_Processor | Measure-Object -Property NumberOfLogicalProcessors -Sum).Sum
-    # Use 1/4 of CPU cores for conservative performance (minimum 1, maximum 3)
-    # Image encoding is VERY CPU-intensive, so we need to be conservative
-    $ParallelJobs = [Math]::Max(1, [Math]::Min(3, [Math]::Floor($cpuCores / 4)))
-    Write-Host "[INFO] Auto-detected $cpuCores CPU cores, using $ParallelJobs parallel jobs (conservative)" -ForegroundColor Cyan
-    Write-Host "[INFO] If system is still choppy, manually set parallel jobs to 1 in config.ps1" -ForegroundColor Yellow
+    # Set to 2 parallel jobs by default for balanced performance
+    # Image encoding is VERY CPU-intensive
+    $ParallelJobs = 2
 }
 
 # Set process priority to reduce system impact
