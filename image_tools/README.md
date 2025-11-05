@@ -1,18 +1,19 @@
-# Image to HEIC Converter
+# Image Converter - HEIC/AVIF
 
-Batch convert JPG, PNG, and other image formats to HEIC format with customizable quality settings.
+Batch convert JPG, PNG, and other image formats to HEIC or AVIF format with customizable quality settings and GUI interface.
 
 ## Features
 
-- **Batch Processing**: Convert multiple images at once
-- **High Efficiency**: HEIC format provides excellent compression (typically 40-60% smaller than JPG)
+- **Dual Format Support**: Convert to HEIC (libheif) or AVIF (FFmpeg libaom-av1)
+- **Batch Processing**: Convert multiple images at once with parallel processing
+- **High Efficiency**: HEIC/AVIF formats provide excellent compression (typically 40-60% smaller than JPG)
 - **Quality Control**: 5-level quality presets (from smallest to maximum quality)
 - **GUI Interface**: Easy-to-use graphical interface for parameter selection
 - **Metadata Preservation**: Optionally preserve EXIF metadata (camera info, GPS, date, etc.)
 - **Smart Skip**: Skip already converted files to save time
 - **Collision Detection**: Automatically handles filename conflicts
 - **Detailed Logging**: Track conversion progress and results
-- **Resize Support**: Optionally resize images during conversion
+- **Bundled Encoder**: libheif 1.20.2 binaries included (no separate installation needed for HEIC)
 - **Advanced Options**: Chroma subsampling, bit depth control (8-bit/10-bit)
 
 ## Quick Start
@@ -26,9 +27,9 @@ Batch convert JPG, PNG, and other image formats to HEIC format with customizable
    - The GUI will automatically launch
 
 3. **Configure settings in the GUI**
+   - Select output format (AVIF recommended, or HEIC)
    - Select quality level (1-5)
-   - Choose output format (HEIC/HEIF)
-   - Set advanced options if needed
+   - Set advanced options if needed (chroma subsampling, bit depth, metadata preservation)
    - Click "Start"
 
 4. **Find converted images in `_output_files` folder**
@@ -38,23 +39,31 @@ Batch convert JPG, PNG, and other image formats to HEIC format with customizable
 ```
 image_tools/
 ├── _input_files/      # Place source images here
-├── _output_files/     # Converted HEIC images appear here
+├── _output_files/     # Converted HEIC/AVIF images appear here
 ├── __logs/            # Conversion logs
+├── __reports/         # Conversion reports (JSON)
 ├── __config/          # Configuration files
+│   └── config.ps1
 └── __lib/             # Helper scripts and GUI
+    ├── helpers.ps1
+    ├── show_conversion_ui.ps1
+    └── libheif-1.20.2-win64/  # Bundled libheif encoder (50+ DLLs)
+        ├── heif-enc.exe        # HEIC encoder
+        ├── heif-dec.exe        # HEIC decoder
+        └── [supporting libraries]
 ```
 
 ## Configuration
 
 Edit `__config/config.ps1` to customize default settings:
 
+- **Output Format**: "avif" (recommended) or "heic"
 - **Quality**: Default quality level (50-95)
-- **Output Format**: HEIC or HEIF
-- **Chroma Subsampling**: 4:2:0 (recommended), 4:2:2, or 4:4:4
+- **Chroma Subsampling**: "source" (match input), "420", "422", or "444"
 - **Bit Depth**: 8-bit (standard) or 10-bit (HDR)
 - **Metadata**: Preserve or strip EXIF data
 - **Skip Existing**: Automatically skip already converted files
-- **Resize**: Set maximum width/height constraints
+- **Parallel Jobs**: Number of concurrent conversions (1-16, default: 4)
 
 ## Quality Presets
 
@@ -87,51 +96,73 @@ Edit `__config/config.ps1` to customize default settings:
 ## Requirements
 
 - **Windows PowerShell 5.1+**
-- **FFmpeg with libx265 support**
+- **FFmpeg with libaom-av1 support** (for AVIF encoding)
   - Download: https://ffmpeg.org/download.html
   - Ensure `ffmpeg` is in your system PATH
+  - Check support: `ffmpeg -encoders | Select-String libaom`
+- **libheif 1.20.2** (for HEIC encoding)
+  - ✅ **Bundled** - No separate installation needed!
+  - Pre-compiled Windows binaries included in `__lib/libheif-1.20.2-win64/`
 
 ## Typical Compression Results
 
-| Format | Original Size | HEIC Size | Compression |
-|--------|--------------|-----------|-------------|
-| JPG    | 5.2 MB       | 2.8 MB    | 54%         |
-| PNG    | 12.5 MB      | 3.1 MB    | 25%         |
-| BMP    | 25.0 MB      | 3.2 MB    | 13%         |
+| Source | Original Size | HEIC/AVIF Size | Compression |
+|--------|--------------|----------------|-------------|
+| JPG    | 5.2 MB       | 2.8 MB         | 54%         |
+| PNG    | 12.5 MB      | 3.1 MB         | 25%         |
+| BMP    | 25.0 MB      | 3.2 MB         | 13%         |
 
-*Results vary based on image content and quality settings*
+*Results vary based on image content, quality settings, and chosen format*
+
+**Format Comparison:**
+- **AVIF**: Generally better compression than HEIC, wider browser support
+- **HEIC**: Apple ecosystem standard, excellent compression, iOS/macOS native support
 
 ## Tips
 
-1. **Start with Quality 3 (Balanced)** - Good balance of quality and file size
-2. **Use Quality 4-5 for photos** - Better for preserving detail
-3. **Enable metadata preservation** - Keeps important camera/date info
-4. **Use resize for web images** - Set max width/height to reduce file size
-5. **Check logs** - View `__logs/` folder for detailed conversion reports
+1. **Choose AVIF for web use** - Better browser support, excellent compression
+2. **Choose HEIC for Apple devices** - Native support on iOS/macOS
+3. **Start with Quality 3 (Balanced)** - Good balance of quality and file size
+4. **Use Quality 4-5 for photos** - Better for preserving detail
+5. **Enable metadata preservation** - Keeps important camera/date info
+6. **Adjust parallel jobs** - Increase for faster batch processing on powerful systems
+7. **Check logs** - View `__logs/` folder for detailed conversion reports
 
 ## Troubleshooting
 
 **"FFmpeg not found"**
 - Install FFmpeg and add to system PATH
 - Or place ffmpeg.exe in the image_tools folder
+- Download from: https://ffmpeg.org/download.html
 
-**"No HEIC encoding support"**
-- Ensure FFmpeg was compiled with libx265 support
+**"AVIF encoding not available"**
+- Ensure FFmpeg was compiled with libaom-av1 support
 - Download a full FFmpeg build from official sources
+- Check with: `ffmpeg -encoders | Select-String libaom`
+
+**"HEIC encoding not available"**
+- This shouldn't happen - libheif 1.20.2 is bundled!
+- Check that `__lib/libheif-1.20.2-win64/heif-enc.exe` exists
+- If missing, re-download the repository
 
 **Output files are too large**
 - Lower the quality setting (try 2-3)
-- Enable 4:2:0 chroma subsampling (default)
+- Enable 4:2:0 chroma subsampling
 - Use 8-bit depth instead of 10-bit
+- Try AVIF format for better compression
 
 **Images look worse than original**
 - Increase quality setting (try 4-5)
-- Use 4:4:4 chroma subsampling for best quality
+- Use "source" chroma subsampling to match input
 - Consider 10-bit depth for HDR content
+- Try HEIC format for better quality at same file size
 
 ## Notes
 
+- **AVIF** is recommended for web/modern use - excellent compression and wide browser support
+- **HEIC** is best for Apple ecosystem - native iOS/macOS support
 - HEIC format may not be compatible with older image viewers
-- Use HEIF extension if HEIC isn't recognized by your system
-- 10-bit HEIC requires HDR-capable displays for full benefit
+- 10-bit encoding requires HDR-capable displays for full benefit
 - Metadata preservation may slightly increase file size
+- Parallel processing speeds up batch conversions significantly
+- Both formats provide significantly better compression than JPG/PNG

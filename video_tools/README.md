@@ -21,6 +21,7 @@ A powerful batch video conversion tool with GPU acceleration, featuring an inter
 - **Crash Recovery**: Cleans up incomplete conversions from previous runs
 - **Collision Detection**: Prevents filename conflicts when converting between container formats
 - **Quality Comparison Tool**: Validate re-encoded video quality using VMAF, SSIM, and/or PSNR metrics (user-selectable)
+- **VLC Side-by-Side Comparison**: Launch source and encoded videos side-by-side in VLC for visual quality inspection
 
 ## Requirements
 
@@ -220,12 +221,15 @@ video_tools/
 │   └── quality_analyzer_config.ps1     # Quality analyzer settings
 ├── __lib/
 │   ├── helpers.ps1                     # Helper functions
+│   ├── ffmpeg_helpers.ps1              # ffmpeg command builders
 │   ├── quality_preview_helper.ps1      # Quality preview functions
 │   ├── show_conversion_ui.ps1          # Main conversion GUI
-│   └── show_quality_analyzer_ui.ps1    # Quality analyzer GUI
+│   ├── show_quality_analyzer_ui.ps1    # Quality analyzer GUI
+│   └── play_with_vlc.ps1               # VLC side-by-side player
 ├── convert_videos.ps1    # Main conversion script
 ├── analyze_quality.ps1   # Quality validation tool
 ├── view_reports.ps1      # Quality report viewer
+├── compare_with_vlc.ps1  # VLC side-by-side comparison tool
 └── README.md             # This file
 ```
 
@@ -266,6 +270,14 @@ Browse and view saved quality reports:
 2. Select a report from the list (sorted by newest first)
 3. View formatted quality metrics and summary
 4. Option to export report to text file
+
+### Example 6: Visual Quality Comparison
+Compare source and encoded videos side-by-side:
+1. Run `.\compare_with_vlc.ps1`
+2. Select an encoded video from the list
+3. Script automatically finds matching source
+4. Both videos launch side-by-side in VLC
+5. Visually inspect quality differences
 
 ## Output Example
 
@@ -512,6 +524,84 @@ Options:
   [E] Export to text file
   [Q] Quit
 ```
+
+## VLC Side-by-Side Comparison
+
+The `compare_with_vlc.ps1` script provides an easy way to visually compare source and encoded videos side-by-side.
+
+### How to Use
+
+```powershell
+.\compare_with_vlc.ps1
+```
+
+The script will:
+1. Show all videos in `_output_files/` directory
+2. Let you select an encoded video
+3. Automatically find the matching source video in `_input_files/`
+4. Launch both videos side-by-side in VLC (left = source, right = encoded)
+5. Position windows optimally for your screen resolution
+
+### Features
+
+- **Automatic Matching**: Intelligently matches encoded files with their sources (handles collision detection renames)
+- **Manual Selection**: Option to manually select source if auto-match fails
+- **Optimized Window Layout**: Each video takes 50% screen width, 90% height
+- **Perfect Sync**: Both videos loop and can be controlled together
+- **File Info Display**: Shows file sizes and compression ratio before playback
+- **Play Another Option**: Quickly compare multiple video pairs in one session
+
+### Requirements
+
+- **VLC Media Player** installed
+  - Download from: https://www.videolan.org/
+  - Auto-detected from standard installation paths
+  - Or specify custom path with `-VlcPath` parameter
+
+### Sample Output
+
+```
+==================================================
+ VIDEO COMPARISON TOOL
+==================================================
+
+Available output files:
+
+  [1] vacation_2024.mp4 (425.3 MB)
+  [2] drone_footage.mp4 (520.4 MB)
+
+Select a file (1-2) or press Enter to cancel: 1
+
+Selected: vacation_2024.mp4
+Source:   vacation_2024.mov
+
+--------------------------------------------------
+SOURCE:  D:\video_tools\_input_files\vacation_2024.mov
+         Size: 850.5 MB
+
+OUTPUT:  D:\video_tools\_output_files\vacation_2024.mp4
+         Size: 425.3 MB
+         Compression: 50.0% of original
+--------------------------------------------------
+
+Launching VLC players...
+[INFO] Using VLC: C:\Program Files\VideoLAN\VLC\vlc.exe
+[INFO] Screen resolution: 1920x1080
+[INFO] Window size: 960x972
+
+[SUCCESS] Both videos launched side-by-side
+
+Options:
+  [P] Play Another Video
+  [Q] Quit
+```
+
+### Tips
+
+1. **Visual Quality Check**: Use this alongside quality metrics (VMAF/SSIM/PSNR) for comprehensive validation
+2. **A/B Testing**: Compare different encoding settings by converting the same source multiple times
+3. **Pause Together**: Pause one player and the other to compare specific scenes frame-by-frame
+4. **Multiple Comparisons**: Use the "Play Another Video" option to quickly evaluate all conversions
 
 ## Troubleshooting
 
